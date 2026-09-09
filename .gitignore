@@ -1,0 +1,70 @@
+# ============================================================
+# meme-monorepo — 根忽略规则
+# 本仓库在根目录(D:\shengqu)下按「每游戏一个文件夹」平铺多款小游戏。
+# 以下规则用于排除各游戏内的【本地产物 / 缓存 / 构建产物 / IDE 状态】，
+# 它们不属于源码，不应进入版本控制（类似 UE 的 DDC / Intermediate）。
+# 全局用不带前导斜杠的模式 → 匹配任意游戏子目录下的同名项。
+# ============================================================
+
+# ---------- 依赖 ----------
+node_modules/
+
+# ---------- 构建产物（可 npm run build 重新生成）----------
+dist/
+build/
+*.tsbuildinfo
+
+# ---------- 本地生成的图片素材缓存 ----------
+# assets/ 内的 PNG 是生图时的本地缓存；游戏运行时以 public/config.json
+# 中的公开 TOS URL 引用，不进 git。
+assets/
+
+# ---------- IDE / 编辑器状态 ----------
+.workbuddy/
+.codebuddy/
+.codex/
+.cursor/
+.claude/
+.trae/
+.vscode/
+.idea/
+*.swp
+*.swo
+*.session
+
+# ---------- MemeSkill 本地状态（登录/token/画布，非源码）----------
+.memeskill/
+# 注意：.memeskillignore 是 MemeSkill 云提交的忽略规则文件，属项目配置，
+# 保留入库；不要在这里误加 .memeskillignore。
+
+# ---------- 环境变量 / 密钥 ----------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# ---------- 日志 ----------
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ---------- 本地冒烟截图 / 调试产物 ----------
+smoke*.png
+preview*.png
+_smoke*.png
+screenshot*.png
+
+# ---------- 操作系统文件 ----------
+.DS_Store
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# ---------- 临时文件 ----------
+tmp/
+temp/
+*.tmp
+*~

@@ -1,0 +1,233 @@
+{
+  "_game_name": "我的手机不可能这么多广告！？",
+  "_config_version": 1,
+  "_comment": "游戏运行时配置。所有图片素材URL必须是可公开访问的https。",
+  "_game_cover_url": {
+    "value": "https://ppy-test.tos-cn-beijing.volces.com/images/1bebf7d7-5b22-4ef3-9c02-822d132c327e.png",
+    "type": "image",
+    "image_type": "Cover",
+    "size": "1440x2560",
+    "label": "游戏封面"
+  },
+  "initial_battery": {
+    "value": 20,
+    "type": "int",
+    "label": "初始电量",
+    "min": 5,
+    "max": 50
+  },
+  "round_seconds": {
+    "value": 30,
+    "type": "int",
+    "label": "倒计时秒数",
+    "min": 15,
+    "max": 60
+  },
+  "natural_drain_per_sec": {
+    "value": 1.5,
+    "type": "float",
+    "label": "自然掉电",
+    "min": 0.5,
+    "max": 5
+  },
+  "correct_close_gain": {
+    "value": 1.5,
+    "type": "float",
+    "label": "关对回电",
+    "min": 0.5,
+    "max": 5
+  },
+  "fake_close_penalty": {
+    "value": 3.0,
+    "type": "float",
+    "label": "假关闭惩罚",
+    "min": 1,
+    "max": 10
+  },
+  "item_charge_gain": {
+    "value": 8.0,
+    "type": "float",
+    "label": "道具回电",
+    "min": 3,
+    "max": 20
+  },
+  "item_time_bonus": {
+    "value": 1.0,
+    "type": "float",
+    "label": "道具时间奖励",
+    "min": 0,
+    "max": 5
+  },
+  "max_popups_on_screen": {
+    "value": 6,
+    "type": "int",
+    "label": "同屏弹窗上限",
+    "min": 3,
+    "max": 8
+  },
+  "popup_spawn_min_ms": {
+    "value": 500,
+    "type": "int",
+    "label": "弹窗最小间隔ms",
+    "min": 200,
+    "max": 1500
+  },
+  "popup_spawn_max_ms": {
+    "value": 1000,
+    "type": "int",
+    "label": "弹窗最大间隔ms",
+    "min": 400,
+    "max": 2500
+  },
+  "item_first_appear_ms": {
+    "value": 8000,
+    "type": "int",
+    "label": "首道具出现ms",
+    "min": 3000,
+    "max": 20000
+  },
+  "item_interval_min_ms": {
+    "value": 12000,
+    "type": "int",
+    "label": "道具间隔min ms",
+    "min": 5000,
+    "max": 30000
+  },
+  "item_interval_max_ms": {
+    "value": 20000,
+    "type": "int",
+    "label": "道具间隔max ms",
+    "min": 8000,
+    "max": 40000
+  },
+  "item_lifetime_ms": {
+    "value": 3000,
+    "type": "int",
+    "label": "道具停留ms",
+    "min": 1500,
+    "max": 6000
+  },
+  "neon_cyan": {
+    "value": "#00f0ff",
+    "type": "color",
+    "label": "霓虹青"
+  },
+  "neon_magenta": {
+    "value": "#ff2bd6",
+    "type": "color",
+    "label": "霓虹紫粉"
+  },
+  "neon_purple": {
+    "value": "#9d4dff",
+    "type": "color",
+    "label": "霓虹紫"
+  },
+  "bg_dark": {
+    "value": "#0a0418",
+    "type": "color",
+    "label": "背景深色"
+  },
+  "card_bg": {
+    "value": "#120826",
+    "type": "color",
+    "label": "弹窗底色"
+  },
+  "score_correct": {
+    "value": 10,
+    "type": "int",
+    "label": "关对加分",
+    "min": 0,
+    "max": 50
+  },
+  "score_fake_penalty": {
+    "value": 5,
+    "type": "int",
+    "label": "误点扣分",
+    "min": 0,
+    "max": 30
+  },
+  "score_item": {
+    "value": 20,
+    "type": "int",
+    "label": "道具加分",
+    "min": 0,
+    "max": 100
+  },
+  "score_miss_item": {
+    "value": 2,
+    "type": "int",
+    "label": "漏掉扣分",
+    "min": 0,
+    "max": 10
+  },
+  "score_win_bonus": {
+    "value": 50,
+    "type": "int",
+    "label": "完赛奖励",
+    "min": 0,
+    "max": 200
+  },
+  "image_background": {
+    "value": "https://ppy-test.tos-cn-beijing.volces.com/images/61ac4b9f-028a-4519-97b4-3f4600c8a4b8.png",
+    "type": "image",
+    "image_type": "Asset",
+    "size": "1440x2560",
+    "label": "桌面背景"
+  },
+  "icon_gift": {
+    "value": "https://ppy-test.tos-cn-beijing.volces.com/cutout/62175e20-5ced-42c2-8bfd-6137b3d3f18f.png",
+    "type": "image",
+    "image_type": "Asset",
+    "size": "1024x1024",
+    "label": "礼盒图标"
+  },
+  "icon_warning": {
+    "value": "https://ppy-test.tos-cn-beijing.volces.com/cutout/2940123e-5f96-4fa2-a6a7-1a59191c000c.png",
+    "type": "image",
+    "image_type": "Asset",
+    "size": "1024x1024",
+    "label": "警告图标"
+  },
+  "icon_rocket": {
+    "value": "https://ppy-test.tos-cn-beijing.volces.com/cutout/c8f05a8b-0321-419d-996f-369cfb8f4228.png",
+    "type": "image",
+    "image_type": "Asset",
+    "size": "1024x1024",
+    "label": "火箭图标"
+  },
+  "icon_castle": {
+    "value": "https://ppy-test.tos-cn-beijing.volces.com/cutout/e48a92a1-b443-413b-9904-2e27413c3155.png",
+    "type": "image",
+    "image_type": "Asset",
+    "size": "1024x1024",
+    "label": "城堡图标"
+  },
+  "icon_diamond": {
+    "value": "https://ppy-test.tos-cn-beijing.volces.com/cutout/5aeef1e3-968a-4b5a-9555-258fed1917a8.png",
+    "type": "image",
+    "image_type": "Asset",
+    "size": "1024x1024",
+    "label": "钻石图标"
+  },
+  "icon_calendar": {
+    "value": "https://ppy-test.tos-cn-beijing.volces.com/cutout/f99466b0-83b2-4d9c-b7b0-9fcba388f4a2.png",
+    "type": "image",
+    "image_type": "Asset",
+    "size": "1024x1024",
+    "label": "日历图标"
+  },
+  "item_battery": {
+    "value": "https://ppy-test.tos-cn-beijing.volces.com/cutout/95918ee3-f733-44d3-bb02-e49050bf7d3b.png",
+    "type": "image",
+    "image_type": "Asset",
+    "size": "1024x1024",
+    "label": "省电电池"
+  },
+  "item_lightning": {
+    "value": "https://ppy-test.tos-cn-beijing.volces.com/cutout/79e572c2-6c21-4e9c-a3ff-fea76032e979.png",
+    "type": "image",
+    "image_type": "Asset",
+    "size": "1024x1024",
+    "label": "闪电道具"
+  }
+}

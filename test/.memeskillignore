@@ -1,0 +1,48 @@
+# MemeSkill 提交忽略规则，语法与 .gitignore 相同
+
+# 依赖
+node_modules/
+
+# 本地游戏素材（运行时使用 public/config.json 中的 TOS URL）
+assets/
+
+# 环境变量 / 密钥
+.env
+.env.*
+!.env.example
+
+# 日志
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# 操作系统文件
+.DS_Store
+Thumbs.db
+
+# 编辑器 / IDE
+.vscode/
+.idea/
+*.swp
+
+# 本地冒烟截图 / 调试产物（不进源码提交）
+/preview_*.png
+/smoke*.png
+
+# 版本控制
+.git/
+.gitignore
+
+# MemeSkill 自身文件
+.memeskill/
+.memeskillignore
+
+# IDE 工作区技能与配置（init 会按目标 IDE 复制 skill 到下列目录）
+.codex/
+.cursor/
+.claude/
+.codebuddy/
+.workbuddy/
+.trae/
