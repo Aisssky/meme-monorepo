@@ -210,37 +210,9 @@ class PopupCard {
     cta.setOrigin(0.5);
     container.add(cta);
 
-    // 根据 kind 生成 × 按钮
-    if (type.kind === 'doubleX') {
-      this.buildDoubleXButtons(scene, trueBtnSize, trueBtnOffset, cfg);
-    } else if (type.kind === 'fullscreen') {
-      this.buildFullscreenClose(scene, trueBtnSize);
-    } else {
-      this.buildNormalButtons(scene, titleH, trueBtnSize, trueBtnOffset);
-    }
-
-    // 入场动画
-    container.setScale(0.6);
-    container.setAlpha(0);
-    scene.tweens.add({
-      targets: container,
-      scale: 1,
-      alpha: 1,
-      duration: 220,
-      ease: 'Back.easeOut',
-    });
-
-    // 点击事件（挂到按钮容器上）
-    this.trueBtn.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-      pointer.event?.stopPropagation();
-      this.onTrue();
-    });
-    this.fakeBtn.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-      pointer.event?.stopPropagation();
-      this.onFake();
-    });
-
     // 透明拦截层：覆盖整卡，放行所有按钮命中区（用本地坐标判断）
+    // 必须先于按钮加入 container，确保按钮在后 = 渲染/命中都在 bounds 之上。
+    // 同时把 bounds 显式 setDepth(-1) 做兜底，万一某 Phaser 路径走场景级 depth 排序也不会压按钮。
     const bounds = scene.add.rectangle(0, 0, this.w, this.h, 0x000000, 0);
     bounds.setInteractive(
       new Phaser.Geom.Rectangle(-this.w / 2, -this.h / 2, this.w, this.h),
@@ -259,8 +231,47 @@ class PopupCard {
     bounds.on('pointerdown', () => {
       /* swallow */
     });
+    bounds.setDepth(-1);
     container.add(bounds);
     this.bounds = bounds;
+
+    // 根据 kind 生成 × 按钮（后加进 container → 排在 bounds 之后 → 优先命中）
+    if (type.kind === 'doubleX') {
+      this.buildDoubleXButtons(scene, trueBtnSize, trueBtnOffset, cfg);
+    } else if (type.kind === 'fullscreen') {
+      this.buildFullscreenClose(scene, trueBtnSize);
+    } else {
+      this.buildNormalButtons(scene, titleH, trueBtnSize, trueBtnOffset);
+    }
+
+    // 防御性兜底：强制把按钮挪到 container 子级列表最末 = 渲染与命中都在 bounds 之上。
+    // bringToTop 会把子对象移到该 container 内部显示列表末尾（同时场景级 depth 不变）。
+    // 这是对“容器内子对象命中顺序”最可靠的覆盖，与 setDepth 无关。
+    container.bringToTop(this.trueBtn);
+    if (this.fakeBtn && this.fakeBtn !== this.trueBtn) {
+      container.bringToTop(this.fakeBtn);
+    }
+
+    // 入场动画
+    container.setScale(0.6);
+    container.setAlpha(0);
+    scene.tweens.add({
+      targets: container,
+      scale: 1,
+      alpha: 1,
+      duration: 220,
+      ease: 'Back.easeOut',
+    });
+
+    // 点击事件（挂到按钮容器上）。放在 bringToTop 之后仍可正常绑定监听。
+    this.trueBtn.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      pointer.event?.stopPropagation();
+      this.onTrue();
+    });
+    this.fakeBtn.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      pointer.event?.stopPropagation();
+      this.onFake();
+    });
   }
 
   /** normal：假× 紫粉右上标题栏 + 真× 青随机角（里/外） */
