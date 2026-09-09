@@ -3,15 +3,6 @@ import type { GameConfig, LevelDef, PopupTypeDef, ScoreSnapshot } from '../types
 import { pickRandomPopupType } from '../data/popupPool';
 import { getLevel, unlockLevel } from '../data/levels';
 
-/** 把 GameObject 加入 container（返回 container，便于链式调用省略 add 返回值）。 */
-function container_add(
-  c: Phaser.GameObjects.Container,
-  o: Phaser.GameObjects.GameObject,
-): Phaser.GameObjects.Container {
-  c.add(o);
-  return c;
-}
-
 /**
  * 根据角位 + 里/外贴边，计算真关闭按钮中心相对弹窗的坐标。
  *  - corner: tl/tr/br/bl 之一
@@ -95,20 +86,29 @@ function drawRoundedRectStroke(
  * - doubleX   双×迷惑：两个 × 都为青色、分居两个对角；真×严格贴边，假×略向中心内收（靠位置辨真伪）
  * - fullscreen 全屏广告：卡片取偏大尺寸，真× 青仅 1 个、贴底边中央外侧（易漏看）
  */
+/**
+ * 一个可点击目标：整卡 body 或某个 × 按钮。
+ * kind: 'body' | 'true' | 'fake'；rect 为本地坐标（相对所属 popup container 中心）。
+ * canvas 像素掩码用它把每张广告的「真实可见像素」画上去，实现像素级命中判定。
+ */
+interface HitZone {
+  kind: 'body' | 'true' | 'fake';
+  cx: number; // 本地中心 x
+  cy: number; // 本地中心 y
+  halfW: number; // 半宽
+  halfH: number; // 半高
+  radius: number; // 圆角半径（body 用；按钮为 0=直角）
+}
+
 class PopupCard {
   public container!: Phaser.GameObjects.Container;
-  public bounds!: Phaser.GameObjects.Rectangle;
 
-  private trueBtn!: Phaser.GameObjects.Container;
-  private fakeBtn!: Phaser.GameObjects.Container;
-
-  // 所有「关闭按钮」命中区（真×/假×/双×两个），供 bounds 透明拦截层放行
-  private buttonZones: Array<{ cx: number; cy: number; half: number }> = [];
+  // 本张广告的可点击像素区（本地坐标）。供场景像素掩码绘制。
+  public hitZones: HitZone[] = [];
 
   private onTrue: () => void;
   private onFake: () => void;
 
-  private type: PopupTypeDef;
   private w: number;
   private h: number;
 
@@ -124,7 +124,6 @@ class PopupCard {
     pw?: number,
     ph?: number,
   ) {
-    this.type = type;
     this.onTrue = onTrue;
     this.onFake = onFake;
 
@@ -217,46 +216,25 @@ class PopupCard {
     cta.setOrigin(0.5);
     container.add(cta);
 
-    // 透明拦截层：覆盖整卡，放行所有按钮命中区（用本地坐标判断）
-    // 必须先于按钮加入 container，确保按钮在后 = 渲染/命中都在 bounds 之上。
-    // 同时把 bounds 显式 setDepth(-1) 做兜底，万一某 Phaser 路径走场景级 depth 排序也不会压按钮。
-    const bounds = scene.add.rectangle(0, 0, this.w, this.h, 0x000000, 0);
-    bounds.setInteractive(
-      new Phaser.Geom.Rectangle(-this.w / 2, -this.h / 2, this.w, this.h),
-      (hitArea: unknown, lx: number, ly: number) => {
-        if (!Phaser.Geom.Rectangle.Contains(hitArea as Phaser.Geom.Rectangle, lx, ly)) {
-          return false;
-        }
-        for (const z of this.buttonZones) {
-          if (Math.abs(lx - z.cx) <= z.half && Math.abs(ly - z.cy) <= z.half) {
-            return false; // 落在按钮区 → 不拦截（放给下层按钮）
-          }
-        }
-        return true; // 非按钮区 → 拦截，吞掉点击
-      },
-    );
-    bounds.on('pointerdown', () => {
-      /* swallow */
+    // 记录整卡 body 的可点击区（本地坐标，相对容器中心）。
+    // 该几何将画进场景像素掩码：点落在 body 上 → 视为「点中该广告本体」（无按钮则吞掉，
+    // 但会天然屏蔽被它覆盖的下层广告，实现像素级遮挡）。
+    this.hitZones.push({
+      kind: 'body',
+      cx: 0,
+      cy: 0,
+      halfW: this.w / 2,
+      halfH: this.h / 2,
+      radius: 16,
     });
-    bounds.setDepth(-1);
-    container.add(bounds);
-    this.bounds = bounds;
 
-    // 根据 kind 生成 × 按钮（后加进 container → 排在 bounds 之后 → 优先命中）
+    // 根据 kind 生成 × 按钮。按钮只画视觉，不注册 Phaser 交互（交互统一交给场景像素掩码分诊）。
     if (type.kind === 'doubleX') {
       this.buildDoubleXButtons(scene, trueBtnSize, trueBtnOffset, cfg);
     } else if (type.kind === 'fullscreen') {
       this.buildFullscreenClose(scene, trueBtnSize);
     } else {
       this.buildNormalButtons(scene, titleH, trueBtnSize, trueBtnOffset);
-    }
-
-    // 防御性兜底：强制把按钮挪到 container 子级列表最末 = 渲染与命中都在 bounds 之上。
-    // bringToTop 会把子对象移到该 container 内部显示列表末尾（同时场景级 depth 不变）。
-    // 这是对“容器内子对象命中顺序”最可靠的覆盖，与 setDepth 无关。
-    container.bringToTop(this.trueBtn);
-    if (this.fakeBtn && this.fakeBtn !== this.trueBtn) {
-      container.bringToTop(this.fakeBtn);
     }
 
     // 入场动画
@@ -269,16 +247,20 @@ class PopupCard {
       duration: 220,
       ease: 'Back.easeOut',
     });
+  }
 
-    // 点击事件（挂到按钮容器上）。放在 bringToTop 之后仍可正常绑定监听。
-    this.trueBtn.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-      pointer.event?.stopPropagation();
+  /** 供场景像素掩码分诊调用：命中某 zone 时触发对应业务。 */
+  public trigger(kind: 'true' | 'fake') {
+    if (kind === 'true') {
       this.onTrue();
-    });
-    this.fakeBtn.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-      pointer.event?.stopPropagation();
+    } else {
       this.onFake();
-    });
+    }
+  }
+
+  /** 由场景像素掩码按 kind 绘制一个圆角矩形。 */
+  public zoneRect(kind: 'body' | 'true' | 'fake'): HitZone | undefined {
+    return this.hitZones.find((z) => z.kind === kind);
   }
 
   /** normal：假× 紫粉右上标题栏 + 真× 青随机角（里/外） */
@@ -289,13 +271,7 @@ class PopupCard {
     trueBtnOffset: number,
   ) {
     // 假×：固定在标题栏右端内侧
-    const fakeHalf = 28;
-    const fakeCx = this.w / 2 - 30;
-    const fakeCy = -this.h / 2 + titleH / 2;
-    this.fakeBtn = this.makeCloseButton(scene, fakeCx, fakeCy, 40, 40, 0xff2bd6, '×', false);
-    this.fakeBtn.setDepth(20);
-    container_add(this.container, this.fakeBtn);
-    this.buttonZones.push({ cx: fakeCx, cy: fakeCy, half: fakeHalf });
+    this.makeCloseButton(scene, this.w / 2 - 30, -this.h / 2 + titleH / 2, 40, 40, 0xff2bd6, '×', 'fake');
 
     // 真×：随机角 + 里/外
     const corners: Array<'tl' | 'tr' | 'br' | 'bl'> = ['tl', 'tr', 'br', 'bl'];
@@ -305,12 +281,7 @@ class PopupCard {
       corner = Phaser.Utils.Array.GetRandom(['tl', 'br', 'bl'] as Array<'tl' | 'br' | 'bl'>);
     }
     const { trueCx, trueCy } = computeTrueButtonPos(this.w, this.h, corner, inner, trueBtnOffset);
-    this.trueBtn = this.makeCloseButton(
-      scene, trueCx, trueCy, trueBtnSize, trueBtnSize, 0x00f0ff, '×', true,
-    );
-    this.trueBtn.setDepth(20);
-    container_add(this.container, this.trueBtn);
-    this.buttonZones.push({ cx: trueCx, cy: trueCy, half: trueBtnSize / 2 + 10 });
+    this.makeCloseButton(scene, trueCx, trueCy, trueBtnSize, trueBtnSize, 0x00f0ff, '×', 'true');
   }
 
   /** doubleX：两个青色 × 分居两个对角，真×贴边、假×内收 */
@@ -329,42 +300,25 @@ class PopupCard {
 
     // 真×：严格贴角（offset 小）
     const { trueCx, trueCy } = computeTrueButtonPos(this.w, this.h, trueCorner, true, trueBtnOffset);
-    this.trueBtn = this.makeCloseButton(
-      scene, trueCx, trueCy, trueBtnSize, trueBtnSize, 0x00f0ff, '×', true,
-    );
-    this.trueBtn.setDepth(20);
-    container_add(this.container, this.trueBtn);
-    this.buttonZones.push({ cx: trueCx, cy: trueCy, half: trueBtnSize / 2 + 10 });
+    this.makeCloseButton(scene, trueCx, trueCy, trueBtnSize, trueBtnSize, 0x00f0ff, '×', 'true');
 
     // 假×：对角 + 沿两轴各内收 btnSize（比真×离角远）
     const innerPad = trueBtnOffset + trueBtnSize;
     const f = computeTrueButtonPos(this.w, this.h, fakeCorner, true, innerPad);
-    this.fakeBtn = this.makeCloseButton(
-      scene, f.trueCx, f.trueCy, trueBtnSize, trueBtnSize, 0x00f0ff, '×', false,
-    );
-    this.fakeBtn.setDepth(20);
-    container_add(this.container, this.fakeBtn);
-    this.buttonZones.push({ cx: f.trueCx, cy: f.trueCy, half: trueBtnSize / 2 + 10 });
+    this.makeCloseButton(scene, f.trueCx, f.trueCy, trueBtnSize, trueBtnSize, 0x00f0ff, '×', 'fake');
   }
 
   /** fullscreen：只有 1 个真×，贴底边中央外侧（青色），无假×按钮 */
   private buildFullscreenClose(scene: Phaser.Scene, trueBtnSize: number) {
     const cx = 0; // 底边中央
-    const cy = this.h / 2 + 18; // 贴在弹窗下沿外侧
-    // 没有假× → fakeBtn 用占位（不存在时点击不触发，直接 close 不计）
-    // 占位一个 offscreen，永不命中
-    this.fakeBtn = this.makeCloseButton(scene, this.w * 10, 0, 40, 40, 0xff2bd6, '×', false);
-    this.fakeBtn.setDepth(-1);
-    container_add(this.container, this.fakeBtn);
-    // 实际关闭 = 贴底外侧青 ×
-    this.trueBtn = this.makeCloseButton(
-      scene, cx, cy, trueBtnSize, trueBtnSize, 0x00f0ff, '×', true,
-    );
-    this.trueBtn.setDepth(20);
-    container_add(this.container, this.trueBtn);
-    this.buttonZones.push({ cx, cy, half: trueBtnSize / 2 + 10 });
+    const cy = this.h / 2 + 18; // 贴在弹窗下沿外侧（本地坐标）
+    this.makeCloseButton(scene, cx, cy, trueBtnSize, trueBtnSize, 0x00f0ff, '×', 'true');
   }
 
+  /**
+   * 画一个 × 关闭按钮（仅视觉）。并把它的本地矩形记入 hitZones，
+   * 由场景像素掩码负责命中（不注册 Phaser 输入，避免重叠时几何命中与视觉不一致）。
+   */
   private makeCloseButton(
     scene: Phaser.Scene,
     x: number,
@@ -373,8 +327,8 @@ class PopupCard {
     h: number,
     color: number,
     label: string,
-    isTrue: boolean,
-  ): Phaser.GameObjects.Container {
+    kind: 'true' | 'fake',
+  ): void {
     const c = scene.add.container(x, y);
     const g = scene.add.graphics();
     g.fillStyle(0x000000, 0.4);
@@ -392,30 +346,12 @@ class PopupCard {
     t.setOrigin(0.5);
     c.add(t);
 
-    // 关键修复：Container 必须自身 setInteractive，Phaser 才会把 pointer 事件
-    // 派发给 c 上注册的监听器（on('pointerdown')）。此前仅容器内子矩形 setInteractive，
-    // 容器本身从不响应输入，导致 真×/假× 点击永远不触发。
-    c.setInteractive(
-      new Phaser.Geom.Rectangle(-w / 2, -h / 2, w, h),
-      Phaser.Geom.Rectangle.Contains,
-    );
-    // 提层级：确保按钮位于卡片透明拦截区（bounds）之上，优先命中
-    c.setDepth(20);
-
-    return c;
+    // 按钮命中区用真实可见尺寸（直角矩形，圆角很小可忽略）。
+    this.hitZones.push({ kind, cx: x, cy: y, halfW: w / 2, halfH: h / 2, radius: 0 });
   }
 
   public destroy() {
     this.container.destroy();
-  }
-
-  public getBounds(): Phaser.Geom.Rectangle {
-    return new Phaser.Geom.Rectangle(
-      this.container.x - this.w / 2,
-      this.container.y - this.h / 2,
-      this.w,
-      this.h,
-    );
   }
 }
 
@@ -449,14 +385,10 @@ class PowerItem {
 
     this.glow = scene.add.rectangle(x, y, 160, 160, 0x00f0ff, 0.18);
     this.glow.setStrokeStyle(2, 0x00f0ff, 0.7);
-    this.glow.setInteractive({ useHandCursor: true });
-    this.glow.on('pointerdown', () => this.collect());
 
     this.sprite = scene.add.image(x, y, textureKey);
     // 重要：先 setDisplaySize 再 setScale，否则 setScale 会基于原始贴图大小覆盖显示尺寸
     this.sprite.setDisplaySize(110, 110);
-    this.sprite.setInteractive({ useHandCursor: true });
-    this.sprite.on('pointerdown', () => this.collect());
 
     // 入场 tween：从 0.4 缩放到目标尺寸（不能用 scale:1 否则会按 1024 贴图原生大小放大）
     // 重要：必须在 texture 已加载之后才计算 width，否则会按 32×32 默认 MISSING 贴图算
@@ -492,7 +424,16 @@ class PowerItem {
     });
   }
 
-  private collect() {
+  /** 场景像素掩码分诊：点是否落在本道具可点范围（未收集时）。 */
+  public contains(px: number, py: number): boolean {
+    if (this.collected) return false;
+    // 图标约 110×110 + 光晕 160，取半径 ~82 的圆形可点区
+    const dx = px - this.sprite.x;
+    const dy = py - this.sprite.y;
+    return dx * dx + dy * dy <= 82 * 82;
+  }
+
+  public collect() {
     if (this.collected) return;
     this.collected = true;
     this.onCollect();
@@ -751,8 +692,105 @@ export class GameScene extends Phaser.Scene {
   }
 
   private setupPointerForPopups() {
-    // 每个 popup 自己处理 pointer 事件。
-    // 这里只兜底：点击空白处不计。
+    // 像素级命中分诊：广告允许重叠后，Phaser 自带的「矩形几何命中 + topOnly」会把上层广告
+    // 的透明整卡/放大缓冲按钮当成最上层命中，几何覆盖 ≠ 视觉可见，导致下层露出的 × 点不到。
+    // 因此这里放弃每个对象各自的 interactive，改为维护一张离屏像素掩码（每帧自底向上把每张
+    // 广告的真实 body 圆角 + 按钮像素 + 道具画上去），点击时读取该点像素得到「视觉最上层命中」。
+    const { width, height } = this.scale;
+    const c = document.createElement('canvas');
+    c.width = Math.ceil(width);
+    c.height = Math.ceil(height);
+    const ctx = c.getContext('2d');
+    if (!ctx) return;
+    this.maskCanvas = c;
+    this.maskCtx = ctx;
+
+    this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      this.dispatchTap(pointer.worldX, pointer.worldY);
+    });
+  }
+
+  private maskCanvas!: HTMLCanvasElement;
+  private maskCtx!: CanvasRenderingContext2D;
+  // 每个画到掩码上的「命中单元」→ 对应弹窗/道具
+  private maskRefs: Array<{ kind: 'body' | 'true' | 'fake' | 'item'; popup?: PopupCard; item?: PowerItem }> = [];
+
+  /** 画一个（世界坐标）圆角矩形色块到掩码。 */
+  private maskFillRoundRect(wx: number, wy: number, halfW: number, halfH: number, radius: number, color: string) {
+    const ctx = this.maskCtx;
+    const x = wx - halfW;
+    const y = wy - halfH;
+    const w = halfW * 2;
+    const h = halfH * 2;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    const r = Math.max(0, Math.min(radius, halfW, halfH));
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  /** 每帧重建像素掩码：自底向上 = 后画的覆盖先画的 → 每像素保存最顶层命中。 */
+  private rebuildMask() {
+    const ctx = this.maskCtx;
+    if (!ctx) return;
+    ctx.clearRect(0, 0, this.maskCanvas.width, this.maskCanvas.height);
+    this.maskRefs.length = 0;
+
+    const indexToColor = (i: number) =>
+      `rgb(${i & 0xff},${(i >> 8) & 0xff},${(i >> 16) & 0xff})`;
+
+    // 广告（投放顺序即由底到顶；关掉的已从 popups 移除）
+    for (const pop of this.popups) {
+      if (!pop.container || !pop.container.active) continue;
+      const c = pop.container;
+      const s = c.scaleX || 1;
+      // 先画 body（圆角矩形），让「点击广告本体」覆盖下层；随后画按钮覆盖在同卡 body 上
+      for (const zone of pop.hitZones) {
+        const wcx = c.x + zone.cx * s;
+        const wcy = c.y + zone.cy * s;
+        const halfW = zone.halfW * s;
+        const halfH = zone.halfH * s;
+        const idx = this.maskRefs.length;
+        this.maskRefs.push({ kind: zone.kind, popup: pop });
+        this.maskFillRoundRect(wcx, wcy, halfW, halfH, zone.radius * s, indexToColor(idx));
+      }
+    }
+    // 道具画在最上层（后生成、渲染在广告之上）
+    for (const it of this.items) {
+      if (it.isDead() || !it.sprite || !it.sprite.active) continue;
+      const idx = this.maskRefs.length;
+      this.maskRefs.push({ kind: 'item', item: it });
+      this.maskFillRoundRect(it.sprite.x, it.sprite.y, 82, 82, 82, indexToColor(idx));
+    }
+  }
+
+  private dispatchTap(wx: number, wy: number) {
+    if (!this.running) return;
+    // 按需重建掩码（仅在点击时构建一次，避免每帧开销）
+    this.rebuildMask();
+    const x = Math.round(wx);
+    const y = Math.round(wy);
+    const cw = this.maskCanvas.width;
+    const ch = this.maskCanvas.height;
+    if (x < 0 || y < 0 || x >= cw || y >= ch) return;
+    const d = this.maskCtx.getImageData(x, y, 1, 1).data;
+    if (d[3] === 0) return; // 点到空白（无广告/道具）
+    const idx = (d[0] | (d[1] << 8) | (d[2] << 16)) & 0xffffff;
+    const ref = this.maskRefs[idx];
+    if (!ref) return;
+    if (ref.kind === 'true') {
+      ref.popup?.trigger('true');
+    } else if (ref.kind === 'fake') {
+      ref.popup?.trigger('fake');
+    } else if (ref.kind === 'item') {
+      ref.item?.collect();
+    }
+    // kind === 'body'：点到广告本体非按钮区 → 不做任何事（吞掉，且已屏蔽其下层）
   }
 
   private popupSpawnTimer?: Phaser.Time.TimerEvent;

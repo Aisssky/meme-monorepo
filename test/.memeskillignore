@@ -31,6 +31,7 @@ Thumbs.db
 /preview_*.png
 /smoke*.png
 /menu_*.png
+/px_hit_*.png
 
 # 版本控制
 .git/
