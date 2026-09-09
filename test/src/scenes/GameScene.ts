@@ -1,6 +1,41 @@
 import Phaser from 'phaser';
-import type { GameConfig, PopupTypeDef, ScoreSnapshot } from '../types';
-import { POPUP_POOL, pickRandomPopupType } from '../data/popupPool';
+import type { GameConfig, LevelDef, PopupTypeDef, ScoreSnapshot } from '../types';
+import { pickRandomPopupType } from '../data/popupPool';
+import { getLevel, unlockLevel } from '../data/levels';
+
+/** 把 GameObject 加入 container（返回 container，便于链式调用省略 add 返回值）。 */
+function container_add(
+  c: Phaser.GameObjects.Container,
+  o: Phaser.GameObjects.GameObject,
+): Phaser.GameObjects.Container {
+  c.add(o);
+  return c;
+}
+
+/**
+ * 根据角位 + 里/外贴边，计算真关闭按钮中心相对弹窗的坐标。
+ *  - corner: tl/tr/br/bl 之一
+ *  - inner: true=按钮中心在弹窗边内 false=在弹窗边外
+ *  - offset: 按钮中心距弹窗边的距离（沿弹窗边方向 + 垂直弹窗边方向都使用此值，
+ *            让按钮完整地贴在角的里侧或外侧）
+ */
+function computeTrueButtonPos(
+  w: number,
+  h: number,
+  corner: 'tl' | 'tr' | 'br' | 'bl',
+  inner: boolean,
+  offset: number,
+): { trueCx: number; trueCy: number } {
+  // 角位坐标（基于弹窗中心 0,0）
+  const cornerX = corner === 'tl' || corner === 'bl' ? -w / 2 : w / 2;
+  const cornerY = corner === 'tl' || corner === 'tr' ? -h / 2 : h / 2;
+  // 里侧：按钮中心向弹窗中心方向缩进 offset；外侧：向弹窗外延伸 offset
+  const sign = inner ? 1 : -1;
+  return {
+    trueCx: cornerX + sign * offset,
+    trueCy: cornerY + sign * offset,
+  };
+}
 
 /** 圆角矩形绘制（用 Graphics 模拟圆角） */
 function drawRoundedRect(
@@ -55,8 +90,10 @@ function drawRoundedRectStroke(
 
 /**
  * 弹窗广告卡片。
- * - 真×：右上角，霓虹青
- * - 假×：左上角或中部，霓虹紫粉 / 假装是「关闭」按钮
+ * 不同 kind 的关闭按钮布局不同，用于关卡难度叠加：
+ * - normal    常规：假× 紫粉固定右上标题栏内侧（经典陷阱）+ 真× 青 随机角贴边（里/外）
+ * - doubleX   双×迷惑：两个 × 都为青色、分居两个对角；真×严格贴边，假×略向中心内收（靠位置辨真伪）
+ * - fullscreen 全屏广告：卡片取偏大尺寸，真× 青仅 1 个、贴底边中央外侧（易漏看）
  */
 class PopupCard {
   public container!: Phaser.GameObjects.Container;
@@ -65,13 +102,15 @@ class PopupCard {
   private trueBtn!: Phaser.GameObjects.Container;
   private fakeBtn!: Phaser.GameObjects.Container;
 
+  // 所有「关闭按钮」命中区（真×/假×/双×两个），供 bounds 透明拦截层放行
+  private buttonZones: Array<{ cx: number; cy: number; half: number }> = [];
+
   private onTrue: () => void;
   private onFake: () => void;
 
   private type: PopupTypeDef;
   private w: number;
   private h: number;
-  private isTrueTopRight: boolean;
 
   constructor(
     scene: Phaser.Scene,
@@ -86,10 +125,18 @@ class PopupCard {
     this.type = type;
     this.onTrue = onTrue;
     this.onFake = onFake;
-    // 真×位置随机化，5% 概率放底部，避免玩家形成「必点右上」的肌肉记忆
-    this.isTrueTopRight = Math.random() > 0.05;
-    this.w = 460;
-    this.h = 280;
+
+    // 1) 弹窗尺寸：normal/doubleX 用关卡范围随机；fullscreen 取偏大固定（关卡 maxW/maxH 本身更大）
+    if (type.kind === 'fullscreen') {
+      this.w = cfg.popup_max_w;
+      this.h = cfg.popup_max_h;
+    } else {
+      this.w = Phaser.Math.Between(cfg.popup_min_w, cfg.popup_max_w);
+      this.h = Phaser.Math.Between(cfg.popup_min_h, cfg.popup_max_h);
+    }
+
+    const trueBtnSize = cfg.true_btn_size;
+    const trueBtnOffset = cfg.true_btn_offset;
 
     const container = scene.add.container(x, y);
     this.container = container;
@@ -99,76 +146,57 @@ class PopupCard {
     drawRoundedRect(gBg, -this.w / 2, -this.h / 2, this.w, this.h, 16, 0x10041f, 0.96);
     container.add(gBg);
 
-    // 霓虹边框
+    // 霓虹边框（fullscreen 用更醒目的紫描边）
+    const borderColor = type.kind === 'fullscreen' ? 0x9d4dff : 0x00f0ff;
     const gBorder = scene.add.graphics();
-    drawRoundedRectStroke(gBorder, -this.w / 2, -this.h / 2, this.w, this.h, 16, 0x00f0ff, 3);
+    drawRoundedRectStroke(gBorder, -this.w / 2, -this.h / 2, this.w, this.h, 16, borderColor, 3);
     container.add(gBorder);
 
-    // 标题栏
+    // 标题栏：顶部高 44
+    const titleH = 44;
     const gTitle = scene.add.graphics();
-    drawRoundedRect(gTitle, -this.w / 2, -this.h / 2, this.w, 50, 16, 0x00f0ff, 0.18);
-    // 覆盖底部圆角
+    drawRoundedRect(gTitle, -this.w / 2, -this.h / 2, this.w, titleH, 16, 0x00f0ff, 0.18);
     gTitle.fillStyle(0x00f0ff, 0.18);
-    gTitle.fillRect(-this.w / 2, -this.h / 2 + 25, this.w, 25);
+    gTitle.fillRect(-this.w / 2, -this.h / 2 + 22, this.w, 22);
     container.add(gTitle);
 
     // 标题文字
-    const titleText = scene.add.text(-this.w / 2 + 24, -this.h / 2 + 25, type.title, {
+    const titleText = scene.add.text(-this.w / 2 + 22, -this.h / 2 + titleH / 2, type.title, {
       fontFamily: '"Microsoft YaHei","PingFang SC",sans-serif',
       fontStyle: 'bold',
-      fontSize: '24px',
+      fontSize: '22px',
       color: '#00f0ff',
     });
     titleText.setOrigin(0, 0.5);
     container.add(titleText);
 
-    // 图标
-    const icon = scene.add.image(-this.w / 2 + 80, 12, iconTexture);
-    icon.setDisplaySize(96, 96);
+    // 内容区：标题栏底部 到 CTA 顶
+    const ctaTopY = this.h / 2 - 56;
+    const contentTopY = -this.h / 2 + titleH;
+    const contentCy = (contentTopY + ctaTopY) / 2;
+
+    // 图标：左侧居中
+    const icon = scene.add.image(-this.w / 2 + 90, contentCy, iconTexture);
+    icon.setDisplaySize(type.kind === 'fullscreen' ? 120 : 80, type.kind === 'fullscreen' ? 120 : 80);
     container.add(icon);
 
-    // 正文
-    const bodyText = scene.add.text(40, -10, type.bodyLines.join('\n'), {
+    // 正文：右侧，wrap 宽度随 w 自适应
+    const bodyX = -this.w / 2 + (type.kind === 'fullscreen' ? 210 : 180);
+    const bodyText = scene.add.text(bodyX, contentCy, type.bodyLines.join('\n'), {
       fontFamily: '"Microsoft YaHei","PingFang SC",sans-serif',
-      fontSize: '22px',
+      fontSize: type.kind === 'fullscreen' ? '22px' : '20px',
       color: '#ffffff',
       align: 'left',
-      lineSpacing: 8,
-      wordWrap: { width: this.w - 220 },
+      lineSpacing: 6,
+      wordWrap: { width: this.w - (type.kind === 'fullscreen' ? 260 : 220) },
     });
     bodyText.setOrigin(0, 0.5);
     container.add(bodyText);
 
-    // 假×：左上角，颜色紫粉
-    this.fakeBtn = this.makeCloseButton(
-      scene,
-      -this.w / 2 + 28,
-      -this.h / 2 + 25,
-      44,
-      44,
-      0xff2bd6,
-      '×',
-      false,
-    );
-    container.add(this.fakeBtn);
-
-    // 真×：右上角，颜色青
-    this.trueBtn = this.makeCloseButton(
-      scene,
-      this.w / 2 - 28,
-      -this.h / 2 + 25,
-      44,
-      44,
-      0x00f0ff,
-      '×',
-      true,
-    );
-    container.add(this.trueBtn);
-
     // 底部分割线 + 假 CTA
     const gCta = scene.add.graphics();
     gCta.lineStyle(2, 0x9d4dff, 0.6);
-    gCta.lineBetween(-this.w / 2 + 24, this.h / 2 - 56, this.w / 2 - 24, this.h / 2 - 56);
+    gCta.lineBetween(-this.w / 2 + 22, ctaTopY, this.w / 2 - 22, ctaTopY);
     container.add(gCta);
 
     const cta = scene.add.text(0, this.h / 2 - 28, '【 立即查看 】', {
@@ -182,6 +210,15 @@ class PopupCard {
     cta.setOrigin(0.5);
     container.add(cta);
 
+    // 根据 kind 生成 × 按钮
+    if (type.kind === 'doubleX') {
+      this.buildDoubleXButtons(scene, trueBtnSize, trueBtnOffset, cfg);
+    } else if (type.kind === 'fullscreen') {
+      this.buildFullscreenClose(scene, trueBtnSize);
+    } else {
+      this.buildNormalButtons(scene, titleH, trueBtnSize, trueBtnOffset);
+    }
+
     // 入场动画
     container.setScale(0.6);
     container.setAlpha(0);
@@ -193,43 +230,121 @@ class PopupCard {
       ease: 'Back.easeOut',
     });
 
-    // 点击事件
-    this.fakeBtn.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-      pointer.event?.stopPropagation();
-      this.onFake();
-    });
+    // 点击事件（挂到按钮容器上）
     this.trueBtn.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
       pointer.event?.stopPropagation();
       this.onTrue();
     });
+    this.fakeBtn.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      pointer.event?.stopPropagation();
+      this.onFake();
+    });
 
-    // 用于 hit-test 区域（透明矩形，覆盖整卡）。
-    // 自定义命中：只拦截「非按钮区」，把左上/右上两个 × 区域让给下层按钮，
-    // 否则盖全卡的透明矩形会在输入检测中把按钮点击也吞掉。
-    const btnHalf = 30; // 按钮判定半宽（略大于 44/2，留出容差）
-    const inButtonArea = (lx: number, ly: number) => {
-      const fakeCx = -this.w / 2 + 28;
-      const trueCx = this.w / 2 - 28;
-      const topCy = -this.h / 2 + 25;
-      return (
-        Math.abs(lx - fakeCx) <= btnHalf && Math.abs(ly - topCy) <= btnHalf
-      ) || (
-        Math.abs(lx - trueCx) <= btnHalf && Math.abs(ly - topCy) <= btnHalf
-      );
-    };
+    // 透明拦截层：覆盖整卡，放行所有按钮命中区（用本地坐标判断）
     const bounds = scene.add.rectangle(0, 0, this.w, this.h, 0x000000, 0);
     bounds.setInteractive(
       new Phaser.Geom.Rectangle(-this.w / 2, -this.h / 2, this.w, this.h),
-      (hitArea: unknown, x: number, y: number) =>
-        Phaser.Geom.Rectangle.Contains(hitArea as Phaser.Geom.Rectangle, x, y) &&
-        !inButtonArea(x, y),
+      (hitArea: unknown, lx: number, ly: number) => {
+        if (!Phaser.Geom.Rectangle.Contains(hitArea as Phaser.Geom.Rectangle, lx, ly)) {
+          return false;
+        }
+        for (const z of this.buttonZones) {
+          if (Math.abs(lx - z.cx) <= z.half && Math.abs(ly - z.cy) <= z.half) {
+            return false; // 落在按钮区 → 不拦截（放给下层按钮）
+          }
+        }
+        return true; // 非按钮区 → 拦截，吞掉点击
+      },
     );
-    // 点击非按钮区域：无效
     bounds.on('pointerdown', () => {
       /* swallow */
     });
     container.add(bounds);
     this.bounds = bounds;
+  }
+
+  /** normal：假× 紫粉右上标题栏 + 真× 青随机角（里/外） */
+  private buildNormalButtons(
+    scene: Phaser.Scene,
+    titleH: number,
+    trueBtnSize: number,
+    trueBtnOffset: number,
+  ) {
+    // 假×：固定在标题栏右端内侧
+    const fakeHalf = 28;
+    const fakeCx = this.w / 2 - 30;
+    const fakeCy = -this.h / 2 + titleH / 2;
+    this.fakeBtn = this.makeCloseButton(scene, fakeCx, fakeCy, 40, 40, 0xff2bd6, '×', false);
+    this.fakeBtn.setDepth(20);
+    container_add(this.container, this.fakeBtn);
+    this.buttonZones.push({ cx: fakeCx, cy: fakeCy, half: fakeHalf });
+
+    // 真×：随机角 + 里/外
+    const corners: Array<'tl' | 'tr' | 'br' | 'bl'> = ['tl', 'tr', 'br', 'bl'];
+    const inner = Math.random() < 0.5;
+    let corner = Phaser.Utils.Array.GetRandom(corners);
+    if (corner === 'tr' && inner) {
+      corner = Phaser.Utils.Array.GetRandom(['tl', 'br', 'bl'] as Array<'tl' | 'br' | 'bl'>);
+    }
+    const { trueCx, trueCy } = computeTrueButtonPos(this.w, this.h, corner, inner, trueBtnOffset);
+    this.trueBtn = this.makeCloseButton(
+      scene, trueCx, trueCy, trueBtnSize, trueBtnSize, 0x00f0ff, '×', true,
+    );
+    this.trueBtn.setDepth(20);
+    container_add(this.container, this.trueBtn);
+    this.buttonZones.push({ cx: trueCx, cy: trueCy, half: trueBtnSize / 2 + 10 });
+  }
+
+  /** doubleX：两个青色 × 分居两个对角，真×贴边、假×内收 */
+  private buildDoubleXButtons(
+    scene: Phaser.Scene,
+    trueBtnSize: number,
+    trueBtnOffset: number,
+    _cfg: GameConfig,
+  ) {
+    const corners: Array<'tl' | 'tr' | 'br' | 'bl'> = ['tl', 'tr', 'br', 'bl'];
+    // 选两个不同对角对（tr/bl 或 tl/br）
+    const diagPair = Math.random() < 0.5 ? ['tl', 'br'] : ['tr', 'bl'];
+    const shuf = Phaser.Utils.Array.Shuffle([...diagPair]) as Array<'tl' | 'br' | 'tr' | 'bl'>;
+    const trueCorner = shuf[0];
+    const fakeCorner = shuf[1];
+
+    // 真×：严格贴角（offset 小）
+    const { trueCx, trueCy } = computeTrueButtonPos(this.w, this.h, trueCorner, true, trueBtnOffset);
+    this.trueBtn = this.makeCloseButton(
+      scene, trueCx, trueCy, trueBtnSize, trueBtnSize, 0x00f0ff, '×', true,
+    );
+    this.trueBtn.setDepth(20);
+    container_add(this.container, this.trueBtn);
+    this.buttonZones.push({ cx: trueCx, cy: trueCy, half: trueBtnSize / 2 + 10 });
+
+    // 假×：对角 + 沿两轴各内收 btnSize（比真×离角远）
+    const innerPad = trueBtnOffset + trueBtnSize;
+    const f = computeTrueButtonPos(this.w, this.h, fakeCorner, true, innerPad);
+    this.fakeBtn = this.makeCloseButton(
+      scene, f.trueCx, f.trueCy, trueBtnSize, trueBtnSize, 0x00f0ff, '×', false,
+    );
+    this.fakeBtn.setDepth(20);
+    container_add(this.container, this.fakeBtn);
+    this.buttonZones.push({ cx: f.trueCx, cy: f.trueCy, half: trueBtnSize / 2 + 10 });
+  }
+
+  /** fullscreen：只有 1 个真×，贴底边中央外侧（青色），无假×按钮 */
+  private buildFullscreenClose(scene: Phaser.Scene, trueBtnSize: number) {
+    const cx = 0; // 底边中央
+    const cy = this.h / 2 + 18; // 贴在弹窗下沿外侧
+    // 没有假× → fakeBtn 用占位（不存在时点击不触发，直接 close 不计）
+    // 占位一个 offscreen，永不命中
+    this.fakeBtn = this.makeCloseButton(scene, this.w * 10, 0, 40, 40, 0xff2bd6, '×', false);
+    this.fakeBtn.setDepth(-1);
+    container_add(this.container, this.fakeBtn);
+    // 实际关闭 = 贴底外侧青 ×
+    this.trueBtn = this.makeCloseButton(
+      scene, cx, cy, trueBtnSize, trueBtnSize, 0x00f0ff, '×', true,
+    );
+    this.trueBtn.setDepth(20);
+    container_add(this.container, this.trueBtn);
+    this.buttonZones.push({ cx, cy, half: trueBtnSize / 2 + 10 });
   }
 
   private makeCloseButton(
@@ -253,7 +368,7 @@ class PopupCard {
     const t = scene.add.text(0, 0, label, {
       fontFamily: 'monospace',
       fontStyle: 'bold',
-      fontSize: isTrue ? '32px' : '28px',
+      fontSize: '30px',
       color: '#' + color.toString(16).padStart(6, '0'),
     });
     t.setOrigin(0.5);
@@ -424,6 +539,10 @@ export class GameScene extends Phaser.Scene {
   static KEY = 'GameScene';
 
   private cfg!: GameConfig;
+  // 本局生效配置 = 全局 cfg 与关卡覆盖项的合并（新建，不污染 registry 的 cfg）
+  private lc!: GameConfig;
+  // 当前关卡
+  private level!: LevelDef;
 
   // 状态
   private battery = 20;
@@ -436,6 +555,11 @@ export class GameScene extends Phaser.Scene {
   private running = true;
   private startTimeMs = 0;
   private elapsedMs = 0;
+  // 关卡广告投放进度：已出总数 / 需正确关闭总数
+  private adsSpawned = 0;
+  private adsTotal = 10;
+  // 胜利奖分（含剩余时间加成）
+  private victoryTimeBonus = 0;
 
   // HUD
   private batteryBar!: Phaser.GameObjects.Rectangle;
@@ -443,6 +567,8 @@ export class GameScene extends Phaser.Scene {
   private timerText!: Phaser.GameObjects.Text;
   private scoreText!: Phaser.GameObjects.Text;
   private statsText!: Phaser.GameObjects.Text;
+  // 顶部「目标」常驻提示行：还需正确关闭 X / 共 Y
+  private objectiveText!: Phaser.GameObjects.Text;
 
   // 弹窗 / 道具
   private popups: PopupCard[] = [];
@@ -461,25 +587,49 @@ export class GameScene extends Phaser.Scene {
     super(GameScene.KEY);
   }
 
+  init(data: { levelId?: number }) {
+    this.level = getLevel(data?.levelId ?? 1);
+  }
+
   create() {
     this.cfg = this.game.registry.get('cfg') as GameConfig;
+    // 关卡覆盖项合并成本局配置（不污染共享 cfg）
+    const lv = this.level;
+    this.lc = {
+      ...this.cfg,
+      initial_battery: lv.initialBattery,
+      round_seconds: lv.roundSeconds,
+      natural_drain_per_sec: lv.naturalDrainPerSec,
+      max_popups_on_screen: lv.maxPopups,
+      popup_spawn_min_ms: lv.spawnMinMs,
+      popup_spawn_max_ms: lv.spawnMaxMs,
+      popup_min_w: lv.popupMinW,
+      popup_max_w: lv.popupMaxW,
+      popup_min_h: lv.popupMinH,
+      popup_max_h: lv.popupMaxH,
+      score_win_bonus: lv.scoreWinBonus,
+    };
+    this.adsTotal = lv.totalAdCount;
+
     const { width, height } = this.scale;
 
     // 初始化状态
-    this.battery = this.cfg.initial_battery;
-    this.timeLeftMs = this.cfg.round_seconds * 1000;
+    this.battery = this.lc.initial_battery;
+    this.timeLeftMs = this.lc.round_seconds * 1000;
     this.score = 0;
     this.correctCloses = 0;
     this.fakeClicks = 0;
     this.itemsCollected = 0;
     this.itemsMissed = 0;
+    this.adsSpawned = 0;
+    this.victoryTimeBonus = 0;
     this.running = true;
     this.popups = [];
     this.items = [];
     this.floatTexts = [];
     this.startTimeMs = this.time.now;
     this.elapsedMs = 0;
-    this.nextItemAt = this.cfg.item_first_appear_ms;
+    this.nextItemAt = this.lc.item_first_appear_ms;
 
     // 背景
     const bg = this.add.image(width / 2, height / 2, 'bg');
@@ -496,10 +646,14 @@ export class GameScene extends Phaser.Scene {
 
     this.buildHud();
     this.setupPointerForPopups();
-    this.scheduleNextPopup(800);
+    // 立即生成第一批（在关卡投放总数内）
+    this.scheduleNextPopup(300);
 
     // 顶部提示
-    this.showBanner('开机…手机已弹窗 99+', 1500);
+    this.showBanner(
+      `第${this.level.id}关 · 在倒计时内关掉全部 ${this.adsTotal} 条广告！`,
+      2400,
+    );
   }
 
   private buildHud() {
@@ -507,30 +661,27 @@ export class GameScene extends Phaser.Scene {
 
     // 顶部 HUD 区域
     const hudY = 50;
-    const hudH = 160;
+    const hudH = 150;
     const hudBg = this.add.graphics();
     hudBg.fillStyle(0x0a0418, 0.85);
     hudBg.fillRect(0, 0, width, hudH);
     hudBg.lineStyle(2, 0x00f0ff, 0.7);
     hudBg.lineBetween(0, hudH, width, hudH);
-    this.add.text(20, 18, '📱 我的手机', {
+
+    // 左侧：关卡名 + 需关广告实时进度
+    this.objectiveText = this.add.text(20, 18, '', {
       fontFamily: '"Microsoft YaHei","PingFang SC",sans-serif',
+      fontStyle: 'bold',
       fontSize: '22px',
-      color: '#00f0ff',
+      color: '#ff2bd6',
     });
+    this.objectiveText.setOrigin(0, 0);
 
-    this.add
-      .text(width - 20, 18, '⏱', {
-        fontFamily: 'monospace',
-        fontSize: '24px',
-        color: '#ff2bd6',
-      })
-      .setOrigin(1, 0);
-
-    this.timerText = this.add.text(width - 20, 16, '30.0', {
+    // 右侧：倒计时
+    this.timerText = this.add.text(width - 20, 16, `${this.adsTotal}.0`, {
       fontFamily: 'monospace',
       fontStyle: 'bold',
-      fontSize: '36px',
+      fontSize: '38px',
       color: '#ff2bd6',
       stroke: '#000',
       strokeThickness: 3,
@@ -539,7 +690,7 @@ export class GameScene extends Phaser.Scene {
 
     // 电量条
     const barX = 20;
-    const barY = 64;
+    const barY = 60;
     const barW = width - 40;
     const barH = 30;
     this.add
@@ -568,15 +719,15 @@ export class GameScene extends Phaser.Scene {
       })
       .setOrigin(1, 0.5);
 
-    // 分数 / 统计
-    this.scoreText = this.add.text(20, 110, '得分 0', {
+    // 得分 / 统计
+    this.scoreText = this.add.text(20, 104, '得分 0', {
       fontFamily: '"Microsoft YaHei","PingFang SC",sans-serif',
       fontSize: '20px',
       color: '#9d4dff',
     });
-    this.statsText = this.add.text(width - 20, 110, '关对 0 / 误点 0 / 漏 0', {
+    this.statsText = this.add.text(width - 20, 104, '关对 0 / 误点 0', {
       fontFamily: '"Microsoft YaHei","PingFang SC",sans-serif',
-      fontSize: '18px',
+      fontSize: '17px',
       color: '#ffffff',
     });
     this.statsText.setOrigin(1, 0);
@@ -589,49 +740,50 @@ export class GameScene extends Phaser.Scene {
 
   private popupSpawnTimer?: Phaser.Time.TimerEvent;
 
+  /** 若本关广告还没投放完，安排下一次生成；已投完则不再生成 */
   private scheduleNextPopup(delayMs?: number) {
     if (this.popupSpawnTimer) this.popupSpawnTimer.remove();
+    if (!this.running || this.adsSpawned >= this.adsTotal) return;
     const d =
       delayMs ??
-      Phaser.Math.Between(this.cfg.popup_spawn_min_ms, this.cfg.popup_spawn_max_ms);
+      Phaser.Math.Between(this.lc.popup_spawn_min_ms, this.lc.popup_spawn_max_ms);
     this.popupSpawnTimer = this.time.addEvent({
       delay: d,
       callback: () => {
         if (!this.running) return;
-        this.trySpawnPopup();
-        // 越后期越快
-        const ratio = Math.min(1, this.elapsedMs / (this.cfg.round_seconds * 1000));
-        const min = Phaser.Math.Linear(this.cfg.popup_spawn_min_ms, 350, ratio);
-        const max = Phaser.Math.Linear(this.cfg.popup_spawn_max_ms, 600, ratio);
-        this.scheduleNextPopup(Phaser.Math.Between(min, max));
+        const spawned = this.trySpawnPopup();
+        const next =
+          spawned && this.adsSpawned < this.adsTotal
+            ? Phaser.Math.Between(this.lc.popup_spawn_min_ms, this.lc.popup_spawn_max_ms)
+            : 260; // 满屏被挡 → 短重试，等有空位
+        this.scheduleNextPopup(next);
       },
       callbackScope: this,
     });
   }
 
-  private trySpawnPopup() {
-    if (this.popups.length >= this.cfg.max_popups_on_screen) {
-      // 强制老化最早一个（视作漏关，扣微量电）
-      const oldest = this.popups.shift();
-      oldest?.destroy();
-      this.battery = Math.max(0, this.battery - 0.5);
-    }
+  /** 尝试投放一个广告；被挡/满员返回 false。成功则 adsSpawned+1 */
+  private trySpawnPopup(): boolean {
+    if (!this.running) return false;
+    if (this.adsSpawned >= this.adsTotal) return false;
+    // 同屏已满：不强清（否则会让广告"凭空消失"导致永远无法全关），等有空位再投
+    if (this.popups.length >= this.lc.max_popups_on_screen) return false;
 
-    // 找一个不重叠的位置
+    // 找一个不重叠的位置（用 max 尺寸测占位，保守避开）
     const { width, height } = this.scale;
     const margin = 16;
-    const popW = 460;
-    const popH = 280;
-    const minTop = 230; // HUD 下方
+    const placeW = this.lc.popup_max_w;
+    const placeH = this.lc.popup_max_h;
+    const minTop = 180; // HUD 下方
     const maxBottom = height - 40;
 
     let x = 0;
     let y = 0;
     let placed = false;
     for (let i = 0; i < 24; i++) {
-      x = Phaser.Math.Between(popW / 2 + margin, width - popW / 2 - margin);
-      y = Phaser.Math.Between(minTop + popH / 2, maxBottom - popH / 2);
-      const test = new Phaser.Geom.Rectangle(x - popW / 2, y - popH / 2, popW, popH);
+      x = Phaser.Math.Between(placeW / 2 + margin, width - placeW / 2 - margin);
+      y = Phaser.Math.Between(minTop + placeH / 2, maxBottom - placeH / 2);
+      const test = new Phaser.Geom.Rectangle(x - placeW / 2, y - placeH / 2, placeW, placeH);
       let overlap = false;
       for (const p of this.popups) {
         if (Phaser.Geom.Rectangle.Overlaps(test, p.getBounds())) {
@@ -644,37 +796,57 @@ export class GameScene extends Phaser.Scene {
         break;
       }
     }
-    if (!placed) return;
+    if (!placed) return false;
 
-    const type = pickRandomPopupType();
+    const type = pickRandomPopupType(this.level.popupPoolIds);
     const popup = new PopupCard(
       this,
       x,
       y,
       type,
       type.iconKey,
-      this.cfg,
+      this.lc,
       () => this.handleTrueClose(popup),
       () => this.handleFakeClose(popup),
     );
     this.popups.push(popup);
+    this.adsSpawned += 1;
+    return true;
   }
 
   private handleTrueClose(popup: PopupCard) {
     this.correctCloses += 1;
-    this.score += this.cfg.score_correct;
-    this.battery = Math.min(100, this.battery + this.cfg.correct_close_gain);
-    this.spawnFloatText(popup.container.x, popup.container.y, `+${this.cfg.correct_close_gain}%`, '#00f0ff');
+    this.score += this.lc.score_correct;
+    this.battery = Math.min(100, this.battery + this.lc.correct_close_gain);
+    this.spawnFloatText(
+      popup.container.x,
+      popup.container.y,
+      `+${this.lc.correct_close_gain}%`,
+      '#00f0ff',
+    );
+    // 移除该弹窗
     this.popupOut(popup, true);
+
+    // 全部广告都已正确关闭 → 立即胜利
+    if (this.correctCloses >= this.adsTotal) {
+      const secLeft = Math.max(0, this.timeLeftMs / 1000);
+      this.victoryTimeBonus = Math.floor(secLeft) * 10;
+      this.endGame(true);
+    }
   }
 
   private handleFakeClose(popup: PopupCard) {
     this.fakeClicks += 1;
-    this.score -= this.cfg.score_fake_penalty;
-    this.battery = Math.max(0, this.battery - this.cfg.fake_close_penalty);
-    this.spawnFloatText(popup.container.x, popup.container.y, `-${this.cfg.fake_close_penalty}%`, '#ff2bd6');
+    this.score -= this.lc.score_fake_penalty;
+    this.battery = Math.max(0, this.battery - this.lc.fake_close_penalty);
+    this.spawnFloatText(
+      popup.container.x,
+      popup.container.y,
+      `点错了！-${this.lc.fake_close_penalty}%`,
+      '#ff2bd6',
+    );
     this.shakeAndFlash();
-    this.popupOut(popup, false);
+    // 误点不关掉广告：弹窗保留，玩家仍需找到真×才能关闭它
   }
 
   private popupOut(popup: PopupCard, isGood: boolean) {
@@ -795,19 +967,19 @@ export class GameScene extends Phaser.Scene {
     if (!this.running) return;
     this.elapsedMs = time - this.startTimeMs;
 
-    // 倒计时
+    // 倒计时结束：若还没关完 → 失败（剩 X 条未关）
     this.timeLeftMs -= delta;
     if (this.timeLeftMs <= 0) {
       this.timeLeftMs = 0;
-      this.endGame(true);
+      this.endGame(false, 'timeout');
       return;
     }
 
-    // 自然掉电
-    this.battery -= (this.cfg.natural_drain_per_sec * delta) / 1000;
+    // 自然掉电 → 电量耗尽失败
+    this.battery -= (this.lc.natural_drain_per_sec * delta) / 1000;
     if (this.battery <= 0) {
       this.battery = 0;
-      this.endGame(false);
+      this.endGame(false, 'battery');
       return;
     }
 
@@ -847,19 +1019,32 @@ export class GameScene extends Phaser.Scene {
       this.timerText.setColor('#ff2bd6');
     }
 
+    // 目标进度：还需正确关闭 X / 共 Y
+    const remain = Math.max(0, this.adsTotal - this.correctCloses);
+    const done = remain === 0;
+    this.objectiveText.setText(
+      `第${this.level.id}关 · ${done ? '全部关闭！' : `还需关 ${remain} / 共 ${this.adsTotal}`}`,
+    );
+    this.objectiveText.setColor(done ? '#00ff80' : '#ff2bd6');
+
     this.scoreText.setText(`得分 ${this.score}`);
     this.statsText.setText(
-      `关对 ${this.correctCloses} / 误点 ${this.fakeClicks} / 漏 ${this.itemsMissed}`,
+      `关对 ${this.correctCloses} / 误点 ${this.fakeClicks} / 剩 ${Math.max(0, this.adsTotal - this.correctCloses)}`,
     );
   }
 
-  private endGame(survived: boolean) {
+  private endGame(survived: boolean, reason: 'battery' | 'timeout' | 'win' = 'win') {
     if (!this.running) return;
     this.running = false;
     if (this.popupSpawnTimer) this.popupSpawnTimer.remove();
 
+    let score = this.score;
+    if (survived) {
+      score += this.level.scoreWinBonus + this.victoryTimeBonus;
+    }
+
     const snap: ScoreSnapshot = {
-      score: this.score,
+      score,
       correctCloses: this.correctCloses,
       fakeClicks: this.fakeClicks,
       itemsCollected: this.itemsCollected,
@@ -868,11 +1053,19 @@ export class GameScene extends Phaser.Scene {
       survived,
       elapsedMs: this.elapsedMs,
     };
+
     if (survived) {
-      this.score += this.cfg.score_win_bonus;
-      snap.score = this.score;
+      unlockLevel(this.level.id + 1);
     }
 
-    this.scene.start('ResultScene', { snapshot: snap });
+    this.scene.start('ResultScene', {
+      snapshot: snap,
+      level: this.level,
+      adsTotal: this.adsTotal,
+      remainingAds: Math.max(0, this.adsTotal - this.correctCloses),
+      winBonus: this.level.scoreWinBonus,
+      timeBonus: this.victoryTimeBonus,
+      reason,
+    });
   }
 }
