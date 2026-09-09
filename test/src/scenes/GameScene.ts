@@ -121,13 +121,20 @@ class PopupCard {
     cfg: GameConfig,
     onTrue: () => void,
     onFake: () => void,
+    pw?: number,
+    ph?: number,
   ) {
     this.type = type;
     this.onTrue = onTrue;
     this.onFake = onFake;
 
-    // 1) 弹窗尺寸：normal/doubleX 用关卡范围随机；fullscreen 取偏大固定（关卡 maxW/maxH 本身更大）
-    if (type.kind === 'fullscreen') {
+    // 1) 弹窗尺寸：normal/doubleX 用关卡范围随机；fullscreen 取偏大固定（关卡 maxW/maxH 本身更大）。
+    //    外部可传 pw/ph（= 放置时用来找位的实际尺寸），保证「占位避让」与「实际渲染」一致，
+    //    否则按 max 占位会把小广告当大广告挤占空间，高难关卡会因放不下而投放停滞。
+    if (pw != null && ph != null) {
+      this.w = pw;
+      this.h = ph;
+    } else if (type.kind === 'fullscreen') {
       this.w = cfg.popup_max_w;
       this.h = cfg.popup_max_h;
     } else {
@@ -780,18 +787,24 @@ export class GameScene extends Phaser.Scene {
     // 同屏已满：不强清（否则会让广告"凭空消失"导致永远无法全关），等有空位再投
     if (this.popups.length >= this.lc.max_popups_on_screen) return false;
 
-    // 找一个不重叠的位置（用 max 尺寸测占位，保守避开）
+    // 先决定本张广告的类型与真实尺寸（全屏取最大，其余在关卡范围内随机），
+    // 用「这张广告自己的尺寸」去找不重叠位置——不能用关卡 max 尺寸占位，
+    // 否则小广告会被当成大尺寸挤占空间，高难关卡会因放不下而投放停滞。
+    const type = pickRandomPopupType(this.level.popupPoolIds);
+    const w = type.kind === 'fullscreen' ? this.lc.popup_max_w : Phaser.Math.Between(this.lc.popup_min_w, this.lc.popup_max_w);
+    const h = type.kind === 'fullscreen' ? this.lc.popup_max_h : Phaser.Math.Between(this.lc.popup_min_h, this.lc.popup_max_h);
+
     const { width, height } = this.scale;
-    const margin = 16;
-    const placeW = this.lc.popup_max_w;
-    const placeH = this.lc.popup_max_h;
+    const margin = 14;
+    const placeW = w;
+    const placeH = h;
     const minTop = 180; // HUD 下方
     const maxBottom = height - 40;
 
     let x = 0;
     let y = 0;
     let placed = false;
-    for (let i = 0; i < 24; i++) {
+    for (let i = 0; i < 40; i++) {
       x = Phaser.Math.Between(placeW / 2 + margin, width - placeW / 2 - margin);
       y = Phaser.Math.Between(minTop + placeH / 2, maxBottom - placeH / 2);
       const test = new Phaser.Geom.Rectangle(x - placeW / 2, y - placeH / 2, placeW, placeH);
@@ -809,7 +822,6 @@ export class GameScene extends Phaser.Scene {
     }
     if (!placed) return false;
 
-    const type = pickRandomPopupType(this.level.popupPoolIds);
     const popup = new PopupCard(
       this,
       x,
@@ -819,6 +831,8 @@ export class GameScene extends Phaser.Scene {
       this.lc,
       () => this.handleTrueClose(popup),
       () => this.handleFakeClose(popup),
+      w,
+      h,
     );
     this.popups.push(popup);
     this.adsSpawned += 1;
