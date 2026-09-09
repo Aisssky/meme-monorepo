@@ -618,7 +618,6 @@ export class GameScene extends Phaser.Scene {
       initial_battery: lv.initialBattery,
       round_seconds: lv.roundSeconds,
       natural_drain_per_sec: lv.naturalDrainPerSec,
-      max_popups_on_screen: lv.maxPopups,
       popup_spawn_min_ms: lv.spawnMinMs,
       popup_spawn_max_ms: lv.spawnMaxMs,
       popup_min_w: lv.popupMinW,
@@ -758,7 +757,7 @@ export class GameScene extends Phaser.Scene {
 
   private popupSpawnTimer?: Phaser.Time.TimerEvent;
 
-  /** 若本关广告还没投放完，安排下一次生成；已投完则不再生成 */
+  /** 若本关广告还没投放完，按固定间隔安排下一次生成；已投完则不再生成。 */
   private scheduleNextPopup(delayMs?: number) {
     if (this.popupSpawnTimer) this.popupSpawnTimer.remove();
     if (!this.running || this.adsSpawned >= this.adsTotal) return;
@@ -769,58 +768,41 @@ export class GameScene extends Phaser.Scene {
       delay: d,
       callback: () => {
         if (!this.running) return;
-        const spawned = this.trySpawnPopup();
-        const next =
-          spawned && this.adsSpawned < this.adsTotal
-            ? Phaser.Math.Between(this.lc.popup_spawn_min_ms, this.lc.popup_spawn_max_ms)
-            : 260; // 满屏被挡 → 短重试，等有空位
-        this.scheduleNextPopup(next);
+        this.trySpawnPopup();
+        // 不管是否投放成功（无同屏上限、允许重叠，投不出仅因已投完），
+        // 未投完就继续按关卡间隔推进下一张
+        if (this.adsSpawned < this.adsTotal) {
+          this.scheduleNextPopup();
+        }
       },
       callbackScope: this,
     });
   }
 
-  /** 尝试投放一个广告；被挡/满员返回 false。成功则 adsSpawned+1 */
+  /**
+   * 投放一张广告（成功则 adsSpawned+1）。
+   * 规则按产品口径：本关「一共要投放 adsTotal 张」就逐张投满为止——
+   * 不设同屏上限、不去避让重叠（广告允许重叠）。位置在屏幕内随机取中心，
+   * 保证中心可见即可。能否在倒计时内把 N 张全关掉完全看玩家手速。
+   */
   private trySpawnPopup(): boolean {
     if (!this.running) return false;
     if (this.adsSpawned >= this.adsTotal) return false;
-    // 同屏已满：不强清（否则会让广告"凭空消失"导致永远无法全关），等有空位再投
-    if (this.popups.length >= this.lc.max_popups_on_screen) return false;
 
-    // 先决定本张广告的类型与真实尺寸（全屏取最大，其余在关卡范围内随机），
-    // 用「这张广告自己的尺寸」去找不重叠位置——不能用关卡 max 尺寸占位，
-    // 否则小广告会被当成大尺寸挤占空间，高难关卡会因放不下而投放停滞。
     const type = pickRandomPopupType(this.level.popupPoolIds);
     const w = type.kind === 'fullscreen' ? this.lc.popup_max_w : Phaser.Math.Between(this.lc.popup_min_w, this.lc.popup_max_w);
     const h = type.kind === 'fullscreen' ? this.lc.popup_max_h : Phaser.Math.Between(this.lc.popup_min_h, this.lc.popup_max_h);
 
     const { width, height } = this.scale;
-    const margin = 14;
-    const placeW = w;
-    const placeH = h;
-    const minTop = 180; // HUD 下方
-    const maxBottom = height - 40;
-
-    let x = 0;
-    let y = 0;
-    let placed = false;
-    for (let i = 0; i < 40; i++) {
-      x = Phaser.Math.Between(placeW / 2 + margin, width - placeW / 2 - margin);
-      y = Phaser.Math.Between(minTop + placeH / 2, maxBottom - placeH / 2);
-      const test = new Phaser.Geom.Rectangle(x - placeW / 2, y - placeH / 2, placeW, placeH);
-      let overlap = false;
-      for (const p of this.popups) {
-        if (Phaser.Geom.Rectangle.Overlaps(test, p.getBounds())) {
-          overlap = true;
-          break;
-        }
-      }
-      if (!overlap) {
-        placed = true;
-        break;
-      }
-    }
-    if (!placed) return false;
+    const minTop = 200;      // HUD 下方
+    const bottomPad = 20;    // 底边距（全屏真×会贴在弹窗下沿，需留一点可点区）
+    // 中心 x / y：优先整卡可见；尺寸过大时 clamp 到屏内，至少中心不越界
+    const loX = Math.min(width - bottomPad, Math.max(bottomPad, w / 2));
+    const hiX = Math.max(loX, width - w / 2 - bottomPad);
+    const loY = Math.min(height - bottomPad, Math.max(minTop, h / 2));
+    const hiY = Math.max(loY, height - h / 2 - bottomPad);
+    const x = Phaser.Math.Between(loX, hiX);
+    const y = Phaser.Math.Between(loY, hiY);
 
     const popup = new PopupCard(
       this,

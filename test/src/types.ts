@@ -75,7 +75,6 @@ export interface LevelDef {
   roundSeconds: number;       // 倒计时
   initialBattery: number;     // 初始电量
   naturalDrainPerSec: number; // 自然掉电速率
-  maxPopups: number;          // 同屏弹窗上限
   spawnMinMs: number;         // 最小生成间隔
   spawnMaxMs: number;         // 最大生成间隔
   popupPoolIds: string[];     // 本关可抽到的广告 id（来自 POPUP_POOL）

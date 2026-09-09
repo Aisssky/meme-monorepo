@@ -30,6 +30,7 @@ Thumbs.db
 # 本地冒烟截图 / 调试产物（不进源码提交）
 /preview_*.png
 /smoke*.png
+/menu_*.png
 
 # 版本控制
 .git/

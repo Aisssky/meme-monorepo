@@ -20,7 +20,6 @@ export const LEVELS: LevelDef[] = [
     roundSeconds: 30,
     initialBattery: 20,
     naturalDrainPerSec: 1.5,
-    maxPopups: 4,
     spawnMinMs: 750,
     spawnMaxMs: 1350,
     popupPoolIds: ['gift', 'warning', 'cleanup', 'lucky', 'signin'],
@@ -39,7 +38,6 @@ export const LEVELS: LevelDef[] = [
     roundSeconds: 36,
     initialBattery: 22,
     naturalDrainPerSec: 1.8,
-    maxPopups: 5,
     spawnMinMs: 560,
     spawnMaxMs: 1000,
     popupPoolIds: ['gift', 'warning', 'cleanup', 'lucky', 'signin', 'game', 'doublex'],
@@ -58,7 +56,6 @@ export const LEVELS: LevelDef[] = [
     roundSeconds: 42,
     initialBattery: 25,
     naturalDrainPerSec: 2.2,
-    maxPopups: 6,
     spawnMinMs: 420,
     spawnMaxMs: 760,
     popupPoolIds: [
@@ -86,7 +83,6 @@ export const LEVELS: LevelDef[] = [
     roundSeconds: 52,
     initialBattery: 26,
     naturalDrainPerSec: 2.3,
-    maxPopups: 7,
     spawnMinMs: 360,
     spawnMaxMs: 640,
     // doublex 重复两次 → 双×迷惑占比更高
@@ -109,7 +105,6 @@ export const LEVELS: LevelDef[] = [
     roundSeconds: 58,
     initialBattery: 27,
     naturalDrainPerSec: 2.4,
-    maxPopups: 7,
     spawnMinMs: 330,
     spawnMaxMs: 580,
     popupPoolIds: [
@@ -131,7 +126,6 @@ export const LEVELS: LevelDef[] = [
     roundSeconds: 62,
     initialBattery: 28,
     naturalDrainPerSec: 2.4,
-    maxPopups: 8,
     spawnMinMs: 305,
     spawnMaxMs: 540,
     popupPoolIds: [
@@ -153,7 +147,6 @@ export const LEVELS: LevelDef[] = [
     roundSeconds: 66,
     initialBattery: 28,
     naturalDrainPerSec: 2.5,
-    maxPopups: 8,
     spawnMinMs: 285,
     spawnMaxMs: 500,
     popupPoolIds: [
@@ -175,7 +168,6 @@ export const LEVELS: LevelDef[] = [
     roundSeconds: 70,
     initialBattery: 29,
     naturalDrainPerSec: 2.5,
-    maxPopups: 8,
     spawnMinMs: 275,
     spawnMaxMs: 470,
     popupPoolIds: [
@@ -197,7 +189,6 @@ export const LEVELS: LevelDef[] = [
     roundSeconds: 74,
     initialBattery: 30,
     naturalDrainPerSec: 2.6,
-    maxPopups: 9,
     spawnMinMs: 265,
     spawnMaxMs: 445,
     popupPoolIds: [
@@ -220,7 +211,6 @@ export const LEVELS: LevelDef[] = [
     roundSeconds: 78,
     initialBattery: 30,
     naturalDrainPerSec: 2.7,
-    maxPopups: 9,
     spawnMinMs: 250,
     spawnMaxMs: 420,
     popupPoolIds: [
