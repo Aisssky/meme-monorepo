@@ -329,6 +329,8 @@ class PopupCard {
     label: string,
     kind: 'true' | 'fake',
   ): void {
+    // 按钮容器必须挂进弹窗容器：x/y 是「相对弹窗中心」的局部坐标，
+    // 只有作为子对象才会随弹窗一起位移/缩放/入场动画，否则会被当作世界坐标画到屏幕左上角。
     const c = scene.add.container(x, y);
     const g = scene.add.graphics();
     g.fillStyle(0x000000, 0.4);
@@ -345,6 +347,9 @@ class PopupCard {
     });
     t.setOrigin(0.5);
     c.add(t);
+
+    // 挂到弹窗容器末尾 → 渲染在卡片本体之上；按钮无 Phaser 交互，命中统一由像素掩码分诊。
+    this.container.add(c);
 
     // 按钮命中区用真实可见尺寸（直角矩形，圆角很小可忽略）。
     this.hitZones.push({ kind, cx: x, cy: y, halfW: w / 2, halfH: h / 2, radius: 0 });
