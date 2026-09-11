@@ -271,5 +271,45 @@
     "image_type": "Asset",
     "size": "1024x1024",
     "label": "闪电道具"
+  },
+  "bgm_main": {
+    "value": "https://vibe-writing-dev-public.tos-cn-beijing.volces.com/bgm/%E8%BF%9E%E5%87%BB%E6%8C%91%E6%88%981.mp3",
+    "type": "audio",
+    "label": "背景音乐"
+  },
+  "sfx_ad_close": {
+    "value": "https://ppy-test.tos-cn-beijing.volces.com/sfx/%E7%82%B9%E5%87%BB.mp3",
+    "type": "audio",
+    "label": "广告关闭音效"
+  },
+  "sfx_success": {
+    "value": "https://ppy-test.tos-cn-beijing.volces.com/sfx/%E6%88%90%E5%8A%9F.mp3",
+    "type": "audio",
+    "label": "成功音效"
+  },
+  "sfx_fail": {
+    "value": "https://ppy-test.tos-cn-beijing.volces.com/sfx/%E6%B8%B8%E6%88%8F%E5%A4%B1%E8%B4%A5.mp3",
+    "type": "audio",
+    "label": "失败音效"
+  },
+  "sfx_fake_close": {
+    "value": "https://ppy-test.tos-cn-beijing.volces.com/sfx/%E5%A4%B1%E8%AF%AF.mp3",
+    "type": "audio",
+    "label": "误点假×音效"
+  },
+  "sfx_click": {
+    "value": "https://ppy-test.tos-cn-beijing.volces.com/sfx/%E7%82%B9%E5%87%BB.mp3",
+    "type": "audio",
+    "label": "界面点击音效"
+  },
+  "audio_music_enabled": {
+    "value": true,
+    "type": "bool",
+    "label": "背景音乐开关"
+  },
+  "audio_sfx_enabled": {
+    "value": true,
+    "type": "bool",
+    "label": "音效开关"
   }
 }

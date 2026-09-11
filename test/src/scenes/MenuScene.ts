@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import type { GameConfig } from '../types';
 import { LEVELS, MAX_LEVEL, getUnlockedLevel } from '../data/levels';
+import { playSfx, AUDIO } from '../audio/AudioManager';
 
 /**
  * 开始界面：关卡选择（逐关解锁，竖排可上下拖动滚动）+ 极简玩法提示。
@@ -22,13 +23,6 @@ export class MenuScene extends Phaser.Scene {
     this.cfg = (this.game.registry.get('cfg') as GameConfig) ?? (this.game as any).cfg;
     const { width, height } = this.scale;
 
-    // 调试用：?autostart=1 直接进第 N 关（验收用）
-    const qs = new URLSearchParams(window.location.search);
-    if (qs.get('autostart') === '1') {
-      this.scene.start('GameScene', { levelId: Number(qs.get('level')) || 1 });
-      return;
-    }
-
     this.cameras.main.setBackgroundColor('#000000');
 
     // 背景
@@ -39,47 +33,51 @@ export class MenuScene extends Phaser.Scene {
 
     const unlocked = getUnlockedLevel();
 
-    // 标题
-    this.add
-      .text(width / 2, height * 0.075, '广告', {
+    // 返回标题页
+    const back = this.add
+      .text(width * 0.13, height * 0.055, '← 返回', {
         fontFamily: '"Microsoft YaHei","PingFang SC",sans-serif',
-        fontSize: '28px',
-        color: '#ff2bd6',
+        fontStyle: 'bold',
+        fontSize: '22px',
+        color: '#00f0ff',
+      })
+      .setOrigin(0.5)
+      .setInteractive({ useHandCursor: true });
+    back.on('pointerover', () => back.setColor('#ffffff'));
+    back.on('pointerout', () => back.setColor('#00f0ff'));
+    back.on('pointerdown', () => {
+      playSfx(this, AUDIO.click);
+      this.scene.start('TitleScene');
+    });
+
+    // 紧凑标题（选关页）
+    this.add
+      .text(width / 2, height * 0.06, '选择关卡', {
+        fontFamily: '"Microsoft YaHei","PingFang SC",sans-serif',
+        fontStyle: 'bold',
+        fontSize: '30px',
+        color: '#00f0ff',
         stroke: '#000000',
         strokeThickness: 5,
       })
       .setOrigin(0.5);
-    this.add
-      .text(width / 2, height * 0.125, '关不完了！', {
-        fontFamily: '"Microsoft YaHei","PingFang SC",sans-serif',
-        fontSize: '44px',
-        color: '#00f0ff',
-        stroke: '#000000',
-        strokeThickness: 6,
-      })
-      .setOrigin(0.5);
 
-    // 玩法一句话
+    // 进度提示（与实际解锁存档同步）
     this.add
-      .text(width / 2, height * 0.185, '在时间内关掉全部广告 · 别点假×  · 别让手机没电', {
-        fontFamily: '"Microsoft YaHei","PingFang SC",sans-serif',
-        fontSize: '15px',
-        color: '#ffffff',
-      })
-      .setOrigin(0.5)
-      .setAlpha(0.9);
-
-    // 第 X/10 关提示
-    this.add
-      .text(width / 2, height * 0.212, `关卡 · 共 ${LEVELS.length} 关 · 可上下滑动查看`, {
-        fontFamily: 'monospace',
-        fontSize: '14px',
-        color: '#9d4dff',
-      })
+      .text(
+        width / 2,
+        height * 0.115,
+        `已解锁第 ${unlocked} / ${LEVELS.length} 关 · 点卡片开始 · 可上下滑动`,
+        {
+          fontFamily: 'monospace',
+          fontSize: '14px',
+          color: '#9d4dff',
+        },
+      )
       .setOrigin(0.5);
 
     // ---- 可滚动关卡列表 ----
-    const listTopY = height * 0.255; // 列表可视区顶（留标题/提示）
+    const listTopY = height * 0.20; // 列表可视区顶（紧凑标题后留白）
     const listBottomY = height * 0.92; // 列表可视区底（留底部署名带）
     const viewH = listBottomY - listTopY;
     const cardW = Math.min(560, width * 0.86);
@@ -264,6 +262,7 @@ export class MenuScene extends Phaser.Scene {
   }
 
   private startGame(levelId: number) {
+    playSfx(this, AUDIO.click);
     this.cameras.main.flash(120, 255, 43, 214, false);
     this.scene.start('GameScene', { levelId });
   }

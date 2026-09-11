@@ -10,6 +10,7 @@ export class PreloadScene extends Phaser.Scene {
   /** 由 BootScene 注入 */
   public imageKeys!: Record<string, string>;
   public imageUrls!: Record<string, string>;
+  public audioUrls: Record<string, string> = {};
 
   constructor() {
     super(PreloadScene.KEY);
@@ -20,6 +21,11 @@ export class PreloadScene extends Phaser.Scene {
 
     for (const [key, url] of Object.entries(this.imageUrls)) {
       this.load.image(this.imageKeys[key], url);
+    }
+
+    // 音频（BGM + SFX）按 key 注入，供各场景通过 key 播放
+    for (const [key, url] of Object.entries(this.audioUrls)) {
+      this.load.audio(key, url);
     }
 
     this.load.on('progress', (p: number) => {
@@ -63,7 +69,7 @@ export class PreloadScene extends Phaser.Scene {
   }
 
   create() {
-    this.scene.start('MenuScene');
+    this.scene.start('TitleScene');
   }
 
   update() {

@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import type { GameConfig, LevelDef, PopupTypeDef, ScoreSnapshot } from '../types';
 import { pickRandomPopupType } from '../data/popupPool';
 import { getLevel, unlockLevel } from '../data/levels';
+import { playBgm, playSfx, stopAudio, AUDIO } from '../audio/AudioManager';
 
 /**
  * 根据角位 + 里/外贴边，计算真关闭按钮中心相对弹窗的坐标。
@@ -20,11 +21,15 @@ function computeTrueButtonPos(
   // 角位坐标（基于弹窗中心 0,0）
   const cornerX = corner === 'tl' || corner === 'bl' ? -w / 2 : w / 2;
   const cornerY = corner === 'tl' || corner === 'tr' ? -h / 2 : h / 2;
-  // 里侧：按钮中心向弹窗中心方向缩进 offset；外侧：向弹窗外延伸 offset
-  const sign = inner ? 1 : -1;
+  // 里侧：按钮中心向弹窗中心方向缩进 offset；外侧：向弹窗外延伸 offset。
+  // 弹窗中心在 (0,0)，因此「朝向中心」= 沿该轴朝 0 靠拢 = corner坐标的符号 * offset 取反；
+  // 单一全局 sign 无法同时满足左右/上下角（右角需 -、左角需 +），必须用各角坐标自身的符号。
+  const dir = inner ? -1 : 1; // 里侧朝中心(减符号)，外侧朝外(加符号)
+  const sx = Math.sign(cornerX);
+  const sy = Math.sign(cornerY);
   return {
-    trueCx: cornerX + sign * offset,
-    trueCy: cornerY + sign * offset,
+    trueCx: cornerX + dir * sx * offset,
+    trueCy: cornerY + dir * sy * offset,
   };
 }
 
@@ -588,6 +593,10 @@ export class GameScene extends Phaser.Scene {
     this.victoryTimeBonus = 0;
     this.running = true;
     this.popups = [];
+
+    // 背景音乐：场景内循环播放，场景关闭时自动停止（不泄漏到结算页）
+    playBgm(this);
+    this.events.once('shutdown', () => stopAudio(this, AUDIO.bgm));
     this.items = [];
     this.floatTexts = [];
     this.startTimeMs = this.time.now;
@@ -641,7 +650,7 @@ export class GameScene extends Phaser.Scene {
     this.objectiveText.setOrigin(0, 0);
 
     // 右侧：倒计时
-    this.timerText = this.add.text(width - 20, 16, `${this.adsTotal}.0`, {
+    this.timerText = this.add.text(width - 20, 16, `${this.lc.round_seconds}.0`, {
       fontFamily: 'monospace',
       fontStyle: 'bold',
       fontSize: '38px',
@@ -837,12 +846,14 @@ export class GameScene extends Phaser.Scene {
     const h = type.kind === 'fullscreen' ? this.lc.popup_max_h : Phaser.Math.Between(this.lc.popup_min_h, this.lc.popup_max_h);
 
     const { width, height } = this.scale;
-    const minTop = 200;      // HUD 下方
+    const hudH = 150;        // 与 buildHud 中 HUD 高度一致
+    const minTop = hudH;     // HUD 下方
     const bottomPad = 20;    // 底边距（全屏真×会贴在弹窗下沿，需留一点可点区）
-    // 中心 x / y：优先整卡可见；尺寸过大时 clamp 到屏内，至少中心不越界
+    // 中心 x / y：优先整卡可见；尺寸过大时 clamp 到屏内，至少中心不越界。
+    // 竖直方向需保证整卡底边在 HUD 之下：center.y - h/2 >= hudH ⇒ center.y >= hudH + h/2。
     const loX = Math.min(width - bottomPad, Math.max(bottomPad, w / 2));
     const hiX = Math.max(loX, width - w / 2 - bottomPad);
-    const loY = Math.min(height - bottomPad, Math.max(minTop, h / 2));
+    const loY = Math.min(height - bottomPad, Math.max(minTop + h / 2, h / 2));
     const hiY = Math.max(loY, height - h / 2 - bottomPad);
     const x = Phaser.Math.Between(loX, hiX);
     const y = Phaser.Math.Between(loY, hiY);
@@ -876,6 +887,8 @@ export class GameScene extends Phaser.Scene {
     );
     // 移除该弹窗
     this.popupOut(popup, true);
+    // 广告被关闭音效
+    playSfx(this, AUDIO.adClose);
 
     // 全部广告都已正确关闭 → 立即胜利
     if (this.correctCloses >= this.adsTotal) {
@@ -896,6 +909,8 @@ export class GameScene extends Phaser.Scene {
       '#ff2bd6',
     );
     this.shakeAndFlash();
+    // 误点假×音效
+    playSfx(this, AUDIO.fakeClose);
     // 误点不关掉广告：弹窗保留，玩家仍需找到真×才能关闭它
   }
 
@@ -1107,6 +1122,9 @@ export class GameScene extends Phaser.Scene {
     if (survived) {
       unlockLevel(this.level.id + 1);
     }
+
+    // 胜负音效
+    playSfx(this, survived ? AUDIO.success : AUDIO.fail);
 
     this.scene.start('ResultScene', {
       snapshot: snap,

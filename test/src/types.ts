@@ -44,6 +44,15 @@ export interface GameConfig {
   icon_calendar: string;
   item_battery: string;
   item_lightning: string;
+  // 音频（CDN 托管，运行时按 key 注入 loader）
+  bgm_main: string;
+  sfx_ad_close: string;
+  sfx_success: string;
+  sfx_fail: string;
+  sfx_fake_close: string;
+  sfx_click: string;
+  audio_music_enabled: boolean;
+  audio_sfx_enabled: boolean;
 }
 
 export interface PopupTypeDef {

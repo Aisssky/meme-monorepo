@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import type { GameConfig, LevelDef, ScoreSnapshot } from '../types';
 import { MAX_LEVEL } from '../data/levels';
+import { playSfx, AUDIO } from '../audio/AudioManager';
 
 interface ResultData {
   snapshot: ScoreSnapshot;
@@ -131,7 +132,10 @@ export class ResultScene extends Phaser.Scene {
         .setOrigin(0.5);
       b.on('pointerover', () => b.setFillStyle(0x2a0a4a, 1));
       b.on('pointerout', () => b.setFillStyle(primary ? 0x14082a : 0x1a0a2a, 1));
-      b.on('pointerdown', cb);
+      b.on('pointerdown', () => {
+        playSfx(this, AUDIO.click);
+        cb();
+      });
     };
 
     const goLevel = (id: number) => {

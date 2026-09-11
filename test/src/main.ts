@@ -1,15 +1,17 @@
 import Phaser from 'phaser';
 import { PreloadScene } from './scenes/PreloadScene';
+import { TitleScene } from './scenes/TitleScene';
 import { MenuScene } from './scenes/MenuScene';
 import { GameScene } from './scenes/GameScene';
 import { ResultScene } from './scenes/ResultScene';
 import type { GameConfig } from './types';
+import { audioLoadList } from './audio/AudioManager';
 
 /**
  * 启动 Phaser 游戏。
  * 1. 拉取运行时 config.json
  * 2. 把所有图片 URL 注入 PreloadScene
- * 3. 启动 PreloadScene → MenuScene → GameScene
+ * 3. 启动 PreloadScene → TitleScene(标题页) → MenuScene(选关页) → GameScene
  */
 async function bootstrap() {
   const raw: Record<string, any> = await fetch('./config.json').then((r) => r.json());
@@ -54,6 +56,13 @@ async function bootstrap() {
   preloadScene.imageKeys = imageKeys;
   preloadScene.imageUrls = imageUrls;
 
+  // 音频 URL（来自 config.json 的 bgm_*/sfx_* 字段）
+  const audioUrls: Record<string, string> = {};
+  for (const { key, url } of audioLoadList(cfg)) {
+    audioUrls[key] = url;
+  }
+  preloadScene.audioUrls = audioUrls;
+
   const config: Phaser.Types.Core.GameConfig = {
     type: Phaser.AUTO,
     parent: 'app',
@@ -64,7 +73,7 @@ async function bootstrap() {
       width: 720,
       height: 1280,
     },
-    scene: [preloadScene, MenuScene, GameScene, ResultScene],
+    scene: [preloadScene, TitleScene, MenuScene, GameScene, ResultScene],
     fps: { target: 60, forceSetTimeOut: false },
     banner: false,
   };
