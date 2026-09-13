@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-page-node-id="C6izeCJluJmvBeL8oBNrVR">
+<head data-page-node-id="42mMRsMjj3TJGh3k1daels">
+<meta charset="UTF-8" data-page-node-id="6XbZ0euVf1EuKUlLE65Rvt">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" data-page-node-id="qhVinv1zwFUkK27qYzgURK">
+<title>我的地铁不可能这么难挤！？</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    height: 100%;
+    background: #1a1d23;
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+    color: #f2f4f8;
+    overflow: hidden;
+    user-select: none;
+  }
+  #wrap {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  #stage {
+    position: relative;
+    width: min(96vw, 96vh * 1.6);
+    aspect-ratio: 960 / 600;
+    max-height: 96vh;
+    background: #0f1115;
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0,0,0,.55);
+  }
+  canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+
+  .overlay {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    text-align: center;
+    background: rgba(10,12,16,.82);
+    backdrop-filter: blur(3px);
+    padding: 24px;
+    z-index: 10;
+  }
+  .overlay.hidden { display: none; }
+  .overlay h1 {
+    font-size: clamp(22px, 4.4vw, 44px);
+    font-weight: 800;
+    letter-spacing: 1px;
+    margin-bottom: 6px;
+    background: linear-gradient(90deg, #ffd166, #ff6b6b, #4dd0e1);
+    -webkit-background-clip: text; background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .overlay h2 { font-size: clamp(18px,3.4vw,32px); margin-bottom: 14px; }
+  .overlay p { font-size: clamp(13px,2vw,17px); line-height: 1.7; color: #c7cdd8; max-width: 640px; }
+  .overlay .small { font-size: clamp(11px,1.6vw,14px); color: #8b93a3; margin-top: 8px; }
+  .stat-line { font-size: clamp(14px,2.4vw,20px); color:#ffd166; margin: 4px 0 14px; font-weight:700; }
+
+  .btn {
+    margin-top: 18px;
+    padding: 13px 34px;
+    font-size: clamp(15px,2.4vw,19px);
+    font-weight: 700;
+    color: #1a1d23;
+    background: linear-gradient(180deg,#ffe08a,#ffce4d);
+    border: none; border-radius: 999px;
+    cursor: pointer;
+    box-shadow: 0 6px 18px rgba(255,206,77,.35);
+    transition: transform .08s ease, box-shadow .15s ease;
+  }
+  .btn:active { transform: translateY(2px) scale(.98); box-shadow: 0 3px 10px rgba(255,206,77,.3); }
+  .btn.alt { background: linear-gradient(180deg,#9be7ff,#5cc6ff); box-shadow:0 6px 18px rgba(92,198,255,.35); margin-left:10px; }
+
+  .tips { margin-top: 16px; font-size: clamp(11px,1.7vw,14px); color:#9aa3b2; line-height:1.8; }
+  .tips b { color:#ffd166; }
+  .pill { display:inline-block; background:#262b36; border:1px solid #353c4a; border-radius:6px; padding:1px 8px; margin:0 2px; color:#cdd4e0; }
+</style>
+</head>
+<body data-page-node-id="UgZ15JLEtzA5NVkZdj2WIS">
+<div id="wrap" data-page-node-id="cBZ2McUzv0MJ00cBR1ciHc">
+  <div id="stage" data-page-node-id="mzQGbx2EBBQKiAAAAflxGV">
+    <canvas id="game" data-page-node-id="eV5M3QBFDQAsGIFf4rGKF4"></canvas>
+
+    <!-- 开始菜单 -->
+    <div id="menu" class="overlay" data-page-node-id="Qv729l9WgC9kn14QXV7V1C">
+      <h1 data-page-node-id="nDjKZ6BJPoP6jDzNbRwSVZ">我的地铁不可能这么难挤！？</h1>
+      <p data-page-node-id="sJtYrhtmnbrNLmMESortDw">早高峰，你要在<b style="color:#ff6b6b" data-page-node-id="vCzBDwRg9W1KMaBPqC1bON">关门倒计时</b>结束前挤进车厢，并抢到一个座位。</p>
+      <div class="tips" data-page-node-id="duAghRDDdBaFXeUIFdDDkG">
+        🟡 <b data-page-node-id="JGEmnEYE4LptdYvjnlh4nb">长按</b>任意位置蓄力，<b data-page-node-id="ouUhvkatu8fsq8sTtnQtRG">松手</b>朝车门挤出。<br data-page-node-id="WfFfAi3pR0GB39W2ALxSvq">
+        蓄力越满 → 冲刺越远、越能挤过更窄的门缝。<br data-page-node-id="Iiv8BrFpXFxVZU6pPaKuLu">
+        ⚠️ 人群越挤越密会推搡你，门缝会越关越窄。<br data-page-node-id="ufJVvTWjw6DYSfLKsfb7iD">
+        进车厢后立刻点空座！座位<b data-page-node-id="wsSIHSztLD3A0My5Pu322y">手慢无</b>。
+      </div>
+      <button class="btn" id="startBtn" data-page-node-id="iJxnWoH2SYJr8FNGLIfVun">开始挤地铁</button>
+      <div class="small" data-page-node-id="DATQLxyMQq1DBb7f2KQG7G">提示：手机可直接按住屏幕，电脑可按住空格或鼠标左键。</div>
+    </div>
+
+    <!-- 胜利 -->
+    <div id="win" class="overlay hidden" data-page-node-id="NY5oif6r78cWORM1mRKtJD">
+      <h2 style="color:#5fe08a" data-page-node-id="kqU42BUJCQ9WfWk9qyACbx">🎉 挤进去还抢到座了！</h2>
+      <div class="stat-line" id="winScore" data-page-node-id="QluH6DUL5NwvHzBxfkoMl4">得分 0</div>
+      <p id="winDetail" data-page-node-id="TRy95vlU302svfmynGNnAL"></p>
+      <div data-page-node-id="LF2CIH40dIRElEesvK65cc">
+        <button class="btn" id="nextBtn" data-page-node-id="rZLjnQzxTbGXSVU6ZOjX1k">下一班（更难）</button>
+        <button class="btn alt" id="replayBtn" data-page-node-id="99vsCtYUWSUuypGcGNJbHO">重玩本关</button>
+      </div>
+    </div>
+
+    <!-- 失败 -->
+    <div id="fail" class="overlay hidden" data-page-node-id="sd7iWemHq29oOu6ovpuoK4">
+      <h2 style="color:#ff6b6b" data-page-node-id="mUD0P3ahAiqvOOUeHaDG0H">💥 没挤上 / 没座了</h2>
+      <p id="failReason" data-page-node-id="vLSif0xBpKQ4Lu74urIJSM"></p>
+      <div class="stat-line" id="failScore" data-page-node-id="z4QWDAdjeilZ3mBU5NNnPf">得分 0</div>
+      <div data-page-node-id="oIO6BwWGYmkiHqAE55ySzP">
+        <button class="btn" id="retryBtn" data-page-node-id="VLbnQZztIg8bN8zUmQUYue">再试一次</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  const LW = 960, LH = 600;
+  const cv = document.getElementById('game');
+  const ctx = cv.getContext('2d');
+
+  // ---------- 画布缩放（高清） ----------
+  function fitCanvas(){
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const r = cv.getBoundingClientRect();
+    cv.width = Math.round(LW * dpr);
+    cv.height = Math.round(LH * dpr);
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+  window.addEventListener('resize', fitCanvas);
+
+  // ---------- 简易音效 ----------
+  let actx = null;
+  function beep(freq, dur, type, vol){
+    try{
+      if(!actx) actx = new (window.AudioContext||window.webkitAudioContext)();
+      const o = actx.createOscillator(), g = actx.createGain();
+      o.type = type||'square'; o.frequency.value = freq;
+      g.gain.value = vol||0.05;
+      o.connect(g); g.connect(actx.destination);
+      const t = actx.currentTime;
+      o.start(t);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + (dur||0.1));
+      o.stop(t + (dur||0.1) + 0.02);
+    }catch(e){}
+  }
+
+  // ---------- 工具 ----------
+  const clamp = (v,a,b)=>Math.max(a,Math.min(b,v));
+  const lerp = (a,b,t)=>a+(b-a)*t;
+  const easeOut = t => 1-Math.pow(1-t,3);
+  function rnd(a,b){ return a + Math.random()*(b-a); }
+  function pick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+
+  // ---------- 游戏常量 ----------
+  const PLAYER_W = 46;        // 玩家"身体宽度"，用于挤缝判定
+  const DOOR_X = 660;         // 车门中线
+  const DOOR_TOP = 165, DOOR_BOTTOM = 452;
+  const PLAYER_START_X = 175;
+  const MAX_LUNGE = 560;      // 满蓄力冲刺距离
+  const CHARGE_TIME = 1.2;    // 蓄满所需秒数
+  const JOSTLE = 0.13;        // 人群推搡对冲刺的最大削减比例
+
+  // ---------- 状态 ----------
+  let G = null;
+  let lastT = 0;
+
+  function makeLevel(level){
+    const doorTime = Math.max(5.0, 9.0 - level*0.6);
+    const gapMax   = Math.max(72, 128 - level*8);
+    const gapMin   = Math.max(11, 22 - level*1.4);
+    const seatCount = 8;
+    const npcTaken  = Math.min(seatCount-2, 1 + Math.floor(level)); // 至少留 2 个空座
+    const claimInterval = Math.max(0.26, 0.62 - level*0.05);
+    const seatTime = Math.max(2.6, 4.2 - level*0.22);
+    return { level, doorTime, gapMax, gapMin, seatCount, npcTaken, claimInterval, seatTime };
+  }
+
+  function startLevel(level){
+    const cfg = makeLevel(level);
+    G = {
+      phase: 'board',          // board | seat
+      cfg,
+      timeLeft: cfg.doorTime,
+      doorGap: cfg.gapMax,
+      playerX: PLAYER_START_X,
+      charging: false,
+      power: 0,
+      lunging: false,
+      lungeT: 0, lungeFrom: 0, lungeTo: 0, lungePower: 0,
+      blockedFlash: 0,
+      inFlash: 0,
+      crowd: 0,
+      npcs: [],                // 站台上的人群（装饰+推搡视觉）
+      seats: [],
+      seatTimer: cfg.seatTime,
+      nextClaim: 0.7,
+      claimed: false,
+      score: 0,
+      particles: []
+    };
+    // 预生成站台人群
+    for(let i=0;i<14;i++){
+      G.npcs.push({ x: rnd(230, 600), y: rnd(DOOR_BOTTOM-8, DOOR_BOTTOM+24), c: pick(['#7d8aa0','#8a93a8','#6f7a92','#9aa3b5']), ph: rnd(0,6.28) });
+    }
+    hideOverlays();
+    fitCanvas();
+  }
+
+  // ---------- 输入 ----------
+  function pointerPos(e){
+    const r = cv.getBoundingClientRect();
+    const cx = (e.touches? e.touches[0].clientX : e.clientX);
+    const cy = (e.touches? e.touches[0].clientY : e.clientY);
+    return { x:(cx-r.left)/r.width*LW, y:(cy-r.top)/r.height*LH };
+  }
+  function press(){
+    if(!G) return;
+    if(G.phase==='board' && !G.lunging){ G.charging = true; }
+  }
+  function release(){
+    if(!G || !G.charging) return;
+    G.charging = false;
+    if(G.phase==='board' && !G.lunging && G.power>2){
+      doLunge(G.power);
+    }
+    G.power = 0;
+  }
+  function doLunge(power){
+    const crowd = G.crowd;
+    const jostle = 1 - JOSTLE*crowd;
+    const dist = (power/100)*MAX_LUNGE*jostle;
+    G.lunging = true;
+    G.lungeT = 0;
+    G.lungeFrom = G.playerX;
+    G.lungeTo = G.playerX + dist;
+    G.lungePower = power;
+    beep(180 + power*2.2, 0.12, 'sawtooth', 0.04);
+  }
+
+  // 座位阶段点击
+  function tapSeat(pos){
+    if(!G || G.phase!=='seat' || G.claimed) return;
+    for(let i=0;i<G.seats.length;i++){
+      const s = G.seats[i];
+      if(!s.free) continue;
+      if(pos.x>=s.x && pos.x<=s.x+s.w && pos.y>=s.y && pos.y<=s.y+s.h){
+        claimSeat(i);
+        return;
+      }
+    }
+  }
+  function claimSeat(i){
+    const s = G.seats[i];
+    if(!s.free) return;
+    s.free = false; s.by = 'you';
+    G.claimed = true;
+    beep(660,0.12,'triangle',0.06);
+    setTimeout(()=>win(), 380);
+  }
+
+  // 指针 / 键盘绑定
+  cv.addEventListener('pointerdown', e=>{ e.preventDefault(); press(); });
+  cv.addEventListener('pointerup',   e=>{ e.preventDefault(); release(); });
+  cv.addEventListener('pointerleave',e=>{ release(); });
+  cv.addEventListener('pointercancel',e=>{ release(); });
+  cv.addEventListener('pointerdown', e=>{ if(G&&G.phase==='seat') tapSeat(pointerPos(e)); });
+  window.addEventListener('keydown', e=>{
+    if(e.code==='Space'){ e.preventDefault(); if(G&&G.phase==='board') press(); }
+    if(e.key==='r'||e.key==='R'){ if(G) startLevel(G.cfg.level); }
+  });
+  window.addEventListener('keyup', e=>{
+    if(e.code==='Space'){ e.preventDefault(); release(); }
+  });
+
+  // ---------- 阶段切换 ----------
+  function enterSeatPhase(){
+    G.phase = 'seat';
+    G.inFlash = 0.5;
+    beep(520,0.16,'triangle',0.06);
+    // 生成座位
+    const n = G.cfg.seatCount;
+    const sw=96, sh=78, gap=12;
+    const totalW = n*sw + (n-1)*gap;
+    const startX = (LW-totalW)/2;
+    const y = 372;
+    G.seats = [];
+    for(let i=0;i<n;i++){
+      G.seats.push({ x:startX+i*(sw+gap), y, w:sw, h:sh, free:true, by:null, pop:0 });
+    }
+    // 随机 NPC 预占
+    const idxs = [...Array(n).keys()];
+    for(let k=idxs.length-1;k>0;k--){ const j=Math.floor(Math.random()*(k+1)); [idxs[k],idxs[j]]=[idxs[j],idxs[k]]; }
+    for(let k=0;k<G.cfg.npcTaken;k++){ G.seats[idxs[k]].free=false; G.seats[idxs[k]].by='npc'; }
+    G.seatTimer = G.cfg.seatTime;
+    G.nextClaim = 0.7;
+  }
+
+  function win(){
+    if(G.phase==='win') return;
+    G.phase='win';
+    const timeBonus = Math.round(G.timeLeft*100);
+    const seatBonus = Math.round(G.seatTimer*60);
+    const lvlBonus = G.cfg.level*250;
+    G.score = 1000 + timeBonus + seatBonus + lvlBonus;
+    document.getElementById('winScore').textContent = '得分 ' + G.score;
+    document.getElementById('winDetail').innerHTML =
+      `第 <b style="color:#ffd166">${G.cfg.level}</b> 关 · 剩余关门时间 +${timeBonus} · 抢座速度 +${seatBonus} · 关卡 +${lvlBonus}`;
+    show('win');
+    beep(880,0.18,'triangle',0.06);
+  }
+  function fail(reason){
+    if(G.phase==='fail'||G.phase==='win') return;
+    const fromSeat = (G.phase==='seat');
+    G.phase='fail';
+    const sc = fromSeat ? G.cfg.level*120 : G.cfg.level*60;
+    document.getElementById('failReason').textContent = reason;
+    document.getElementById('failScore').textContent = '得分 ' + sc;
+    show('fail');
+    beep(140,0.32,'sawtooth',0.06);
+  }
+
+  // ---------- 更新 ----------
+  function update(dt){
+    if(!G) return;
+    if(G.phase==='board') updateBoard(dt);
+    else if(G.phase==='seat') updateSeat(dt);
+
+    // 粒子
+    for(let i=G.particles.length-1;i>=0;i--){
+      const p=G.particles[i];
+      p.x+=p.vx*dt; p.y+=p.vy*dt; p.vy+=400*dt; p.life-=dt;
+      if(p.life<=0) G.particles.splice(i,1);
+    }
+    for(const s of (G.seats||[])) if(s.pop>0) s.pop=Math.max(0,s.pop-dt*4);
+    if(G.blockedFlash>0) G.blockedFlash-=dt;
+    if(G.inFlash>0) G.inFlash-=dt;
+  }
+
+  function updateBoard(dt){
+    G.timeLeft -= dt;
+    if(G.timeLeft<=0){
+      G.timeLeft=0;
+      if(G.playerX + PLAYER_W/2 < DOOR_X - G.doorGap/2 - 2){
+        fail('车门关上了，你被留在站台上了……下次早点蓄力！');
+      }
+      return;
+    }
+    G.crowd = clamp(1 - G.timeLeft/G.cfg.doorTime, 0, 1);
+    // 门缝随倒计时收窄
+    G.doorGap = lerp(G.cfg.gapMax, G.cfg.gapMin, G.crowd);
+
+    if(G.charging){
+      G.power = clamp(G.power + dt/CHARGE_TIME*100, 0, 100);
+    }
+
+    if(G.lunging){
+      G.lungeT += dt/0.30;
+      const t = clamp(G.lungeT,0,1);
+      G.playerX = lerp(G.lungeFrom, G.lungeTo, easeOut(t));
+      if(G.lungeT>=1){
+        G.lunging=false;
+        const openingLeft = DOOR_X - G.doorGap/2;
+        if(G.playerX + PLAYER_W/2 >= openingLeft){
+          // 到了门口：判定能否挤过
+          const req = PLAYER_W*(1.1 - 0.4*(G.lungePower/100));
+          if(G.doorGap >= req){
+            spawnParticles(DOOR_X, (DOOR_TOP+DOOR_BOTTOM)/2, '#5fe08a', 16);
+            enterSeatPhase();
+          } else {
+            // 被门卡住，弹回
+            G.playerX = openingLeft - PLAYER_W/2 - 26;
+            G.blockedFlash = 0.4;
+            beep(120,0.18,'square',0.05);
+            spawnParticles(DOOR_X, (DOOR_TOP+DOOR_BOTTOM)/2, '#ff6b6b', 10);
+          }
+        }
+        // 没到门口则保留进度，可继续蓄力
+      }
+    }
+    // 人群轻微推搡动画
+    for(const n of G.npcs){ n.ph += dt*2; }
+  }
+
+  function updateSeat(dt){
+    G.seatTimer -= dt;
+    // NPC 陆续占座
+    G.nextClaim -= dt;
+    if(G.nextClaim<=0){
+      G.nextClaim = G.cfg.claimInterval;
+      const freeIdx = G.seats.map((s,i)=>s.free?i:-1).filter(i=>i>=0);
+      if(freeIdx.length>0){
+        const i = pick(freeIdx);
+        G.seats[i].free=false; G.seats[i].by='npc'; G.seats[i].pop=1;
+        beep(300,0.07,'sine',0.04);
+      }
+    }
+    const anyFree = G.seats.some(s=>s.free);
+    if(!anyFree && !G.claimed){
+      fail('车厢里座无虚席，你只能站着……（没抢到座位）');
+      return;
+    }
+    if(G.seatTimer<=0 && !G.claimed){
+      fail('倒计时结束你还没坐下，被列车员请出去了……（没找到座位）');
+    }
+  }
+
+  function spawnParticles(x,y,color,count){
+    for(let i=0;i<count;i++){
+      const a = rnd(0,6.28), sp=rnd(40,180);
+      G.particles.push({ x,y, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp-60, life:rnd(0.3,0.7), color });
+    }
+  }
+
+  // ---------- 渲染 ----------
+  function render(){
+    ctx.clearRect(0,0,LW,LH);
+    if(!G){ return; }
+    if(G.phase==='board') drawBoard();
+    else drawSeat();
+    drawParticles();
+    drawHUD();
+  }
+
+  function drawPlatform(){
+    // 站台地面
+    ctx.fillStyle='#3a4150'; ctx.fillRect(0, DOOR_BOTTOM, LW, LH-DOOR_BOTTOM);
+    ctx.fillStyle='#2c323d'; ctx.fillRect(0, DOOR_BOTTOM, LW, 8);
+    // 墙/背景
+    const g = ctx.createLinearGradient(0,0,0,DOOR_BOTTOM);
+    g.addColorStop(0,'#23262e'); g.addColorStop(1,'#2e333d');
+    ctx.fillStyle=g; ctx.fillRect(0,0,LW,DOOR_BOTTOM);
+    // 站台黄色安全线
+    ctx.fillStyle='#f4c430'; ctx.fillRect(0, DOOR_BOTTOM-6, LW, 4);
+  }
+
+  function drawTrain(){
+    // 车厢主体（右侧）
+    ctx.fillStyle='#2b6cb0';
+    ctx.fillRect(DOOR_X+G.doorGap/2, 120, LW-(DOOR_X+G.doorGap/2), DOOR_BOTTOM-120+4);
+    // 车顶条
+    ctx.fillStyle='#1f4e80'; ctx.fillRect(DOOR_X+G.doorGap/2, 120, LW-(DOOR_X+G.doorGap/2), 14);
+    // 窗
+    ctx.fillStyle='#bfe3ff';
+    for(let wx=DOOR_X+G.doorGap/2+30; wx<LW-50; wx+=120){
+      ctx.fillRect(wx, 160, 80, 70);
+    }
+    // 门框与门缝
+    const openingLeft = DOOR_X - G.doorGap/2;
+    const openingRight = DOOR_X + G.doorGap/2;
+    // 门洞背景（车厢内部暗示）
+    ctx.fillStyle='#16324f';
+    ctx.fillRect(openingLeft, DOOR_TOP, G.doorGap, DOOR_BOTTOM-DOOR_TOP);
+    // 两扇门（向两侧）
+    ctx.fillStyle='#dfe6ee';
+    ctx.fillRect(openingLeft-46, DOOR_TOP, 44, DOOR_BOTTOM-DOOR_TOP);
+    ctx.fillRect(openingRight+2, DOOR_TOP, 44, DOOR_BOTTOM-DOOR_TOP);
+    ctx.fillStyle='#9fb0c0';
+    ctx.fillRect(openingLeft-6, DOOR_TOP, 4, DOOR_BOTTOM-DOOR_TOP);
+    ctx.fillRect(openingRight+2, DOOR_TOP, 4, DOOR_BOTTOM-DOOR_TOP);
+    // 门缝警示
+    ctx.fillStyle = G.doorGap < PLAYER_W ? '#ff6b6b' : '#5fe08a';
+    ctx.fillRect(DOOR_X-2, DOOR_TOP, 4, DOOR_BOTTOM-DOOR_TOP);
+  }
+
+  function drawPerson(x, baseY, color, scale, face){
+    const w = 30*scale, h=54*scale;
+    const y = baseY - h;
+    // 身体
+    ctx.fillStyle=color;
+    ctx.beginPath();
+    ctx.moveTo(x-w/2, baseY);
+    ctx.lineTo(x-w/2+3, y+18*scale);
+    ctx.quadraticCurveTo(x, y+6*scale, x+w/2-3, y+18*scale);
+    ctx.lineTo(x+w/2, baseY);
+    ctx.closePath(); ctx.fill();
+    // 头
+    ctx.fillStyle = face||'#f1c27d';
+    ctx.beginPath(); ctx.arc(x, y, 11*scale, 0, 6.28); ctx.fill();
+  }
+
+  function drawBoard(){
+    drawPlatform();
+    drawTrain();
+
+    // 站台人群
+    for(const n of G.npcs){
+      const jx = Math.sin(n.ph)*3;
+      drawPerson(n.x+jx, n.y, n.c, 0.95);
+    }
+
+    // 玩家
+    const px = G.playerX, py = DOOR_BOTTOM+2;
+    if(G.blockedFlash>0){
+      ctx.save();
+      ctx.globalAlpha = 0.5+0.5*Math.sin(G.blockedFlash*40);
+      ctx.fillStyle='#ff6b6b';
+      ctx.beginPath(); ctx.arc(px, py-30, 40,0,6.28); ctx.fill();
+      ctx.restore();
+    }
+    drawPerson(px, py, '#ffd166', 1.15, '#ffcf9e');
+    // 蓄力光环
+    if(G.charging){
+      ctx.save();
+      ctx.globalAlpha=0.4+0.4*(G.power/100);
+      ctx.strokeStyle='#ffe08a'; ctx.lineWidth=4;
+      ctx.beginPath(); ctx.arc(px, py-34, 30+G.power*0.25,0,6.28); ctx.stroke();
+      ctx.restore();
+    }
+
+    // 蓄力条（玩家头顶）
+    if(G.charging || G.power>0){
+      const bw=90, bh=12, bx=px-bw/2, by=py-92;
+      ctx.fillStyle='rgba(0,0,0,.5)'; ctx.fillRect(bx-2,by-2,bw+4,bh+4);
+      ctx.fillStyle='#333'; ctx.fillRect(bx,by,bw,bh);
+      const col = G.power>80?'#5fe08a':G.power>40?'#ffd166':'#ff8c42';
+      ctx.fillStyle=col; ctx.fillRect(bx,by,bw*G.power/100,bh);
+      // 挤过所需阈值标记
+      const need = PLAYER_W*(1.1-0.4*(G.doorGap>0?G.power/100:0)); // 仅参考
+    }
+
+    drawParticles();
+  }
+
+  function drawSeat(){
+    // 车厢内部背景
+    const g=ctx.createLinearGradient(0,0,0,LH);
+    g.addColorStop(0,'#244a6e'); g.addColorStop(1,'#1b3a57');
+    ctx.fillStyle=g; ctx.fillRect(0,0,LW,LH);
+    // 地板
+    ctx.fillStyle='#16314a'; ctx.fillRect(0, 470, LW, LH-470);
+    // 顶部扶手杆
+    ctx.strokeStyle='#cdd6e0'; ctx.lineWidth=6;
+    ctx.beginPath(); ctx.moveTo(0,120); ctx.lineTo(LW,120); ctx.stroke();
+
+    // 标题提示
+    ctx.fillStyle='#cfe6ff';
+    ctx.font='bold 22px sans-serif'; ctx.textAlign='center';
+    ctx.fillText('快！点一个空座位坐下！', LW/2, 70);
+
+    // 座位
+    for(let i=0;i<G.seats.length;i++){
+      const s=G.seats[i];
+      if(s.by==='you'){
+        ctx.fillStyle='#5fe08a';
+        roundRect(s.x,s.y,s.w,s.h,10); ctx.fill();
+        drawPerson(s.x+s.w/2, s.y+s.h-6, '#ffd166', 0.9);
+        ctx.fillStyle='#0c3d22'; ctx.font='bold 14px sans-serif'; ctx.fillText('你', s.x+s.w/2, s.y+18);
+      } else if(s.by==='npc'){
+        ctx.fillStyle='#3a4658';
+        roundRect(s.x,s.y,s.w,s.h,10); ctx.fill();
+        drawPerson(s.x+s.w/2, s.y+s.h-6, '#9aa3b5', 0.85);
+      } else {
+        // 空座：闪烁绿
+        const pulse = 0.6+0.4*Math.sin(performance.now()/200 + i);
+        ctx.save();
+        ctx.shadowColor='rgba(95,224,138,'+pulse+')'; ctx.shadowBlur=18;
+        ctx.fillStyle='rgba(95,224,138,'+(0.35+0.3*pulse)+')';
+        roundRect(s.x,s.y,s.w,s.h,10); ctx.fill();
+        ctx.restore();
+        ctx.strokeStyle='#5fe08a'; ctx.lineWidth=3;
+        roundRect(s.x,s.y,s.w,s.h,10); ctx.stroke();
+        ctx.fillStyle='#dffbe8'; ctx.font='bold 15px sans-serif'; ctx.fillText('空座', s.x+s.w/2, s.y+s.h/2+5);
+      }
+    }
+  }
+
+  function roundRect(x,y,w,h,r){
+    ctx.beginPath();
+    ctx.moveTo(x+r,y);
+    ctx.arcTo(x+w,y,x+w,y+h,r);
+    ctx.arcTo(x+w,y+h,x,y+h,r);
+    ctx.arcTo(x,y+h,x,y,r);
+    ctx.arcTo(x,y,x+w,y,r);
+    ctx.closePath();
+  }
+
+  function drawParticles(){
+    for(const p of G.particles){
+      ctx.globalAlpha=clamp(p.life*1.6,0,1);
+      ctx.fillStyle=p.color;
+      ctx.beginPath(); ctx.arc(p.x,p.y,3,0,6.28); ctx.fill();
+    }
+    ctx.globalAlpha=1;
+  }
+
+  function drawHUD(){
+    if(!G) return;
+    if(G.phase==='board'){
+      // 倒计时
+      const big = G.timeLeft<=3;
+      ctx.textAlign='left';
+      ctx.fillStyle = big? '#ff6b6b':'#ffd166';
+      ctx.font='bold 30px sans-serif';
+      ctx.fillText('关门倒计时  '+G.timeLeft.toFixed(1)+'s', 24, 44);
+      // 门缝宽度
+      ctx.fillStyle='#cfe6ff'; ctx.font='15px sans-serif';
+      ctx.fillText('门缝宽度: '+Math.round(G.doorGap)+'  (你需要约 '+Math.round(PLAYER_W*(1.1-0.4*(G.power/100)))+' 才能挤过)', 24, 72);
+      // 人群密度
+      ctx.fillStyle='#cfe6ff'; ctx.fillText('人群密度', 24, 100);
+      const cw=160, cx=24, cy=108;
+      ctx.fillStyle='#333'; ctx.fillRect(cx,cy,cw,10);
+      ctx.fillStyle = G.crowd>0.7?'#ff6b6b':G.crowd>0.4?'#ffd166':'#5fe08a';
+      ctx.fillRect(cx,cy,cw*G.crowd,10);
+      ctx.fillStyle='#9aa3b5'; ctx.font='12px sans-serif';
+      ctx.fillText('第 '+G.cfg.level+' 关', 24, 140);
+    } else if(G.phase==='seat'){
+      ctx.textAlign='left';
+      ctx.fillStyle = G.seatTimer<=1.5?'#ff6b6b':'#ffd166';
+      ctx.font='bold 26px sans-serif';
+      ctx.fillText('抢座倒计时  '+G.seatTimer.toFixed(1)+'s', 24, 44);
+      const free = G.seats.filter(s=>s.free).length;
+      ctx.fillStyle='#cfe6ff'; ctx.font='15px sans-serif';
+      ctx.fillText('剩余空座: '+free+' / '+G.seats.length, 24, 74);
+    }
+  }
+
+  // ---------- 主循环 ----------
+  function loop(t){
+    if(!lastT) lastT=t;
+    let dt=(t-lastT)/1000; lastT=t;
+    dt=Math.min(dt,0.05);
+    if(G && (G.phase==='board'||G.phase==='seat')) update(dt);
+    render();
+    requestAnimationFrame(loop);
+  }
+
+  // ---------- 覆盖层控制 ----------
+  function show(id){ hideOverlays(); document.getElementById(id).classList.remove('hidden'); }
+  function hideOverlays(){
+    ['menu','win','fail'].forEach(i=>document.getElementById(i).classList.add('hidden'));
+  }
+
+  document.getElementById('startBtn').onclick = ()=>{ startLevel(1); };
+  document.getElementById('nextBtn').onclick  = ()=>{ startLevel((G?G.cfg.level:1)+1); };
+  document.getElementById('replayBtn').onclick= ()=>{ startLevel(G?G.cfg.level:1); };
+  document.getElementById('retryBtn').onclick = ()=>{ startLevel(G?G.cfg.level:1); };
+
+  // 启动渲染（菜单态）
+  fitCanvas();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
