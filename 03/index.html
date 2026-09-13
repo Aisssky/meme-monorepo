@@ -1,0 +1,878 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-page-node-id="vtwUql8NYhpBbRDHlepu5D">
+<head data-page-node-id="XV03AammsG6p6PYLAhZqlm">
+<meta charset="UTF-8" data-page-node-id="otrBZGsFIi1gYdaUTeF8zr">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" data-page-node-id="75UyZu4BpyKKn5cRDFByGo">
+<title>我的快餐店不可能破产！？</title>
+<style>
+  :root{
+    --red:#e23b2e; --red-d:#b32118; --yellow:#ffd24a; --yellow-d:#f0a500;
+    --ink:#2b1a12; --gold:#f5b400;
+    /* ===== 画面分层（自下而上，数值即层级）=====
+       L1 背景层  → L2 顾客层 → L3 备餐操作层 → L4 HUD/UI → L5 特效浮层 → L6 拖拽 */
+    --z-bg:1;    --z-cust:20; --z-prep:30; --z-ui:40;
+    --z-fx:60;   --z-toast:70; --z-sys:95; --z-mute:100; --z-mark:150; --z-drag:200;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;height:100%;}
+  body{
+    font-family:"PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+    background:#1b1b1f; color:var(--ink);
+    display:flex; justify-content:center; align-items:center;
+    overflow:hidden; user-select:none; -webkit-user-select:none;
+  }
+  #app{
+    /* 严格保持 9:16，随视口自适应，两侧（或上下）留黑边——避免背景图被裁切 */
+    position:relative;
+    width:min(100vw, 56.25vh);
+    height:min(177.78vw, 100vh);
+    background:#fff3e0; overflow:hidden;
+    box-shadow:0 0 40px rgba(0,0,0,.5);
+  }
+  .scene{position:absolute; inset:0;}
+  .scene.hidden{display:none;}
+  .bg{position:absolute; inset:0; background-size:cover; background-position:center;}
+  .bg-title{background-image:url('assets/scene_title.png');}
+  .bg-mall {background-image:url('assets/scene_mall.png');}
+  .bg-shop {background-image:url('assets/scene_shop_bare.png');}
+
+  /* ===================== 画面分层体系 =====================
+     L1 背景层(layer-bg)  → L2 顾客层(layer-cust) → L3 备餐操作层(layer-prep)
+     → L4 HUD/UI(layer-ui) → L5 特效浮层 → L6 拖拽幽灵
+     层容器自身默认不吃点击，只有需要交互的节点单独放开 pointer-events。 */
+  .layer{position:absolute; inset:0;}
+  .layer-bg  {z-index:var(--z-bg);}
+  .layer-cust{z-index:var(--z-cust); pointer-events:none;}
+  .layer-prep{z-index:var(--z-prep); pointer-events:none;}
+  .layer-ui  {z-index:var(--z-ui);   pointer-events:none;}
+  .layer-cust > *{pointer-events:none;}
+  .layer-prep > *{pointer-events:none;}
+  .layer-ui   > *{pointer-events:none;}
+  /* 各层内需要交互的节点 */
+  .layer-cust .customers{pointer-events:auto;}   /* 顾客必须可被 elementFromPoint 命中（拖放目标） */
+  .layer-prep .trays{pointer-events:auto;}
+  .layer-ui .hud, .layer-ui .hire-btn{pointer-events:auto;}
+
+  /* L2 顾客层：压暗远景，让顾客从背景里"浮"出来（远=暗，近=亮） */
+  .layer-cust::before{content:""; position:absolute; left:0; right:0; top:0; height:58%;
+    background:linear-gradient(rgba(26,15,4,.36), rgba(26,15,4,.10) 58%, rgba(26,15,4,0));
+    pointer-events:none;}
+  /* L3 备餐层：近景操作台面——顶部高光 + 向上投射的阴影，形成"离玩家最近"的实体感 */
+  .prep-surface{position:absolute; left:0; right:0; bottom:0; z-index:1;
+    background:linear-gradient(rgba(255,244,220,.26), rgba(255,238,205,.12) 20%, rgba(52,30,12,.34));
+    border-top:2px solid rgba(255,255,255,.5);
+    box-shadow:0 -16px 28px rgba(28,15,3,.45), inset 0 3px 0 rgba(255,255,255,.35);
+    pointer-events:none;}
+
+  /* 标题页 */
+  .scene[data-s="title"]{cursor:pointer;}
+  .title-hint{position:absolute; left:50%; bottom:6%; transform:translateX(-50%);
+    color:#fff; font-weight:800; font-size:14px; background:rgba(0,0,0,.4);
+    padding:8px 16px; border-radius:20px; animation:bob 1.6s ease-in-out infinite;}
+  @keyframes bob{0%,100%{transform:translateX(-50%) translateY(0)}50%{transform:translateX(-50%) translateY(-6px)}}
+
+  /* HUD */
+  .hud{position:absolute; top:0; left:0; right:0; padding:10px 14px;
+    display:flex; align-items:center; justify-content:space-between; z-index:var(--z-ui);}
+  .coin{width:18px;height:18px;border-radius:50%;background:var(--yellow);
+    border:2px solid var(--yellow-d); display:inline-block; position:relative;}
+  .coin::after{content:"¥";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--red-d);font-size:11px;font-weight:900;}
+  .money{display:flex; align-items:center; gap:6px; font-weight:900; font-size:20px;
+    background:rgba(0,0,0,.5); color:#fff; padding:6px 14px; border-radius:14px;}
+  .back-btn{background:rgba(0,0,0,.5); color:#fff; border:0; border-radius:12px;
+    padding:9px 14px; font-size:14px; font-weight:800; cursor:pointer;}
+  .back-btn:active{transform:scale(.95);}
+  .shop-name{color:#fff; font-weight:900; font-size:16px;
+    background:rgba(0,0,0,.5); padding:8px 14px; border-radius:12px;}
+
+  /* 商场——门面槽位：严格贴合背景图里的真实门面位置 */
+  .shop-slot{
+    position:absolute; cursor:pointer; z-index:6; border-radius:10px;
+    -webkit-tap-highlight-color:transparent; transition:transform .12s;
+  }
+  .shop-slot:active{transform:scale(.97);}
+  .shop-slot .ss-facade{width:100%; height:100%; display:block; object-fit:fill;
+    animation:facadeIn .42s cubic-bezier(.34,1.56,.64,1);}
+  @keyframes facadeIn{0%{opacity:0; transform:scale(.84)}100%{opacity:1; transform:scale(1)}}
+  .shop-slot .ss-enter{position:absolute; left:50%; bottom:4%; transform:translateX(-50%);
+    background:rgba(255,255,255,.93); color:#a0521c; font-weight:900; font-size:11px;
+    padding:3px 13px; border-radius:11px; white-space:nowrap;
+    box-shadow:0 2px 5px rgba(0,0,0,.32);}
+  .shop-slot.on::after{content:""; position:absolute; inset:-2px; border-radius:12px;
+    pointer-events:none; animation:slotHalo 2.2s ease-in-out infinite;}
+  @keyframes slotHalo{0%,100%{box-shadow:0 0 0 0 rgba(255,210,74,0)}50%{box-shadow:0 0 14px 3px rgba(255,210,74,.55)}}
+  /* 未解锁：只在门面上叠一个价格徽章 */
+  .shop-slot .ss-lock-badge{position:absolute; left:50%; top:53%; transform:translate(-50%,-50%);
+    background:rgba(18,13,8,.74); color:#fff; font-weight:900; font-size:12px;
+    padding:5px 13px 5px 10px; border-radius:14px; white-space:nowrap;
+    border:2px solid rgba(255,255,255,.34);
+    display:flex; align-items:center; gap:4px; box-shadow:0 2px 6px rgba(0,0,0,.35);}
+  .shop-slot .ss-lock-badge svg{width:12px; height:12px; display:block;}
+  .shop-slot.afford .ss-lock-badge{background:linear-gradient(#ffd85c,#ff9c2e);
+    color:#6d3306; border-color:#fff; animation:badgePulse 1.4s ease-in-out infinite;}
+  @keyframes badgePulse{0%,100%{box-shadow:0 0 0 0 rgba(255,205,70,.65)}
+    50%{box-shadow:0 0 15px 4px rgba(255,205,70,.85)}}
+
+  /* 店内——L2 顾客区（上：离玩家最远，站在柜台外侧） */
+  .customers{position:absolute; left:0; right:0; top:14%; height:30%;
+    display:flex; justify-content:space-around; align-items:flex-end; padding:0 5%; z-index:2;}
+  .customer{position:relative; display:flex; flex-direction:column; align-items:center; width:30%;}
+  .customer.drop{outline:3px dashed var(--yellow); outline-offset:4px; border-radius:14px; background:rgba(255,210,74,.15);}
+  .bubble{background:#fff; border:3px solid var(--ink); border-radius:16px;
+    padding:6px; margin-bottom:6px; position:relative; box-shadow:0 3px 0 rgba(0,0,0,.2);}
+  .bubble img{display:block; width:clamp(30px,9vw,44px); height:clamp(30px,9vw,44px); object-fit:contain;}
+  .bubble::after{content:"";position:absolute;left:50%;bottom:-11px;transform:translateX(-50%);
+    border:8px solid transparent; border-top-color:var(--ink); border-bottom:0;}
+  .bubble::before{content:"";position:absolute;left:50%;bottom:-7px;transform:translateX(-50%);
+    border:8px solid transparent; border-top-color:#fff; border-bottom:0; z-index:1;}
+  .cface{width:clamp(52px,15vw,84px); height:auto; display:block;
+    filter:drop-shadow(0 3px 3px rgba(0,0,0,.3));}
+  .timer{font-size:11px; font-weight:900; color:#fff; background:rgba(0,0,0,.6);
+    padding:2px 9px; border-radius:10px; margin-top:3px;}
+
+  /* 店内——L3 出餐台（单托盘居中：本店只做一种招牌食物） */
+  .trays{position:absolute; left:0; right:0; top:46%; z-index:2;
+    display:flex; justify-content:center; align-items:flex-start; padding:0 15%;}
+  .tray{width:100%; display:flex; flex-direction:column; align-items:center; gap:5px;
+    background:linear-gradient(#fffaf0,#ffe9c7); border:3px solid #c98b4b; border-radius:16px;
+    padding:6px 9px 9px;
+    box-shadow:0 5px 0 rgba(120,70,20,.35), inset 0 2px 0 rgba(255,255,255,.85);}
+  .tray-label{font-size:12px; font-weight:900; color:#8a5220; line-height:1.15; letter-spacing:.5px;}
+  .tray-slots{display:flex; gap:6px; width:100%; justify-content:center;}
+  .tray-slot{flex:1; aspect-ratio:1; max-width:46px; display:flex; align-items:center; justify-content:center;
+    border-radius:9px; background:#f0dcbb; border:2px dashed #cfae82;}
+  .tray-slot.filled{background:transparent; border:0; cursor:grab; touch-action:none;}
+  .tray-slot.filled:active{cursor:grabbing;}
+  .tray-slot img{width:100%; height:100%; object-fit:contain;
+    filter:drop-shadow(0 2px 3px rgba(0,0,0,.35)); animation:pop .28s cubic-bezier(.34,1.56,.64,1);}
+  .tray-slot.ready{animation:slotReady .5s ease-out;}
+  @keyframes pop{0%{transform:scale(.4)}100%{transform:scale(1)}}
+  @keyframes slotReady{0%{background:rgba(255,210,74,.85)}100%{background:transparent}}
+
+  /* L3 设备区域——纯视觉锚点（自动出餐）。位置与文案由 JS 按店铺品类设置 */
+  .devices{position:absolute; left:0; right:0; top:67%; height:30%; z-index:2; pointer-events:none;}
+  .device-hint{position:absolute; left:50%; transform:translateX(-50%); font-size:12px; font-weight:900; color:#fff;
+    background:rgba(0,0,0,.58); padding:4px 14px; border-radius:12px; white-space:nowrap;
+    animation:devWork 2.2s ease-in-out infinite;}
+  @keyframes devWork{0%,100%{box-shadow:0 0 0 0 rgba(255,210,74,0)}50%{box-shadow:0 0 12px 3px rgba(255,210,74,.55)}}
+
+  /* 雇员工按钮（上移到安全区，避开编辑器预览底栏；事件委托到 document，抗 DOM 重注入） */
+  .hire-btn{position:absolute; left:50%; bottom:12%; transform:translateX(-50%);
+    background:linear-gradient(90deg,#ff7a3c,#ffb347); color:#fff; border:0;
+    border-radius:16px; padding:10px 18px; font-size:13px; font-weight:900; cursor:pointer;
+    box-shadow:0 4px 0 rgba(0,0,0,.25); z-index:2; white-space:nowrap;
+    pointer-events:auto; touch-action:manipulation;}
+  .hire-btn:disabled{opacity:.55; cursor:not-allowed;}
+  .hire-btn:not(:disabled){animation:hirePulse 1.4s infinite;}
+  @keyframes hirePulse{0%,100%{box-shadow:0 4px 0 rgba(0,0,0,.25),0 0 0 0 rgba(255,180,71,.7)}50%{box-shadow:0 4px 0 rgba(0,0,0,.25),0 0 16px 4px rgba(255,180,71,.5)}}
+
+  /* 员工可视化 */
+  .emp-badge{position:absolute; top:10%; left:50%; transform:translateX(-50%);
+    background:rgba(0,0,0,.55); color:#fff; padding:4px 12px; border-radius:14px;
+    font-size:11px; font-weight:900; z-index:var(--z-ui); display:flex; align-items:center; gap:6px;
+    white-space:nowrap;}
+  /* 商场场景：标题占顶部，把徽章下移到标题与首排店铺之间 */
+  .scene[data-s="mall"] .emp-badge{top:20.2%; font-size:12px; padding:5px 14px;}
+  .emp-badge .dot{width:8px;height:8px;border-radius:50%;background:#7be37b;
+    animation:pulseDot 1.2s ease-in-out infinite;}
+  @keyframes pulseDot{0%,100%{transform:scale(1)}50%{transform:scale(1.4)}}
+
+  #toast{position:absolute; z-index:var(--z-toast); top:5.6%; left:50%; transform:translateX(-50%);
+    background:var(--ink); color:#fff; padding:10px 18px; border-radius:20px; font-weight:800;
+    font-size:15px; opacity:0; transition:opacity .3s; pointer-events:none; white-space:nowrap;}
+  #toast.show{opacity:.95;}
+  .reset{position:absolute; z-index:var(--z-sys); left:8px; bottom:8px; font-size:10px; color:#fff;
+    background:rgba(0,0,0,.35); border:0; border-radius:10px; padding:3px 8px; cursor:pointer; opacity:.85;}
+  .float-coin{position:fixed; z-index:var(--z-fx); font-weight:900; font-size:22px; color:var(--gold);
+    text-shadow:0 2px 0 #fff,0 0 6px rgba(240,165,0,.6); pointer-events:none;
+    transform:translate(-50%,-50%); animation:rise .9s ease-out forwards;}
+  @keyframes rise{0%{opacity:0;transform:translate(-50%,-30%) scale(.8)}
+    20%{opacity:1}100%{opacity:0;transform:translate(-50%,-180%) scale(1.1)}}
+  .ghost{position:fixed; z-index:var(--z-drag); pointer-events:none;}
+  .ghost img{width:100%; height:100%; object-fit:contain; filter:drop-shadow(0 6px 8px rgba(0,0,0,.4));}
+  .emp-mark{position:fixed; z-index:var(--z-mark); pointer-events:none;
+    background:linear-gradient(90deg,#ff7a3c,#ffb347); color:#fff;
+    font-size:12px; font-weight:900; padding:3px 10px; border-radius:12px;
+    transform:translate(-50%,-50%); white-space:nowrap;
+    box-shadow:0 2px 6px rgba(0,0,0,.35); animation:empMark .8s ease-out forwards;}
+  @keyframes empMark{0%{opacity:0;transform:translate(-50%,-30%) scale(.7)}
+    25%{opacity:1;transform:translate(-50%,-50%) scale(1.05)}
+    100%{opacity:0;transform:translate(-50%,-140%) scale(1)}}
+
+  /* 全局静音按钮：右上角固定，与金币胶囊错开 */
+  .mute{
+    position:fixed; top:8px; right:8px; width:38px; height:38px; border-radius:50%;
+    background:rgba(0,0,0,.55); color:#fff; border:0; cursor:pointer; z-index:var(--z-mute);
+    display:flex; align-items:center; justify-content:center;
+    box-shadow:0 2px 6px rgba(0,0,0,.4); transition:transform .12s ease;
+    -webkit-tap-highlight-color:transparent;
+  }
+  .mute:active{transform:scale(.9)}
+  .mute svg{width:22px; height:22px; display:block;}
+  .mute .cross{stroke:#ff5252; stroke-width:2.6; stroke-linecap:round; display:none}
+  /* 静音后：喇叭变暗 + 显示红斜线 + 隐藏声波 */
+  .mute.muted .speaker{fill:rgba(255,255,255,.5)}
+  .mute.muted .cross{display:inline}
+  .mute.muted .waves{display:none}
+  /* 金币胶囊让出 mute 按钮空间（44 = 8 + 38 - 2） */
+  .scene .money{margin-right:46px}
+</style>
+</head>
+<body data-page-node-id="s0K4gLcNMC79KXwpQKJo2J">
+<div id="app" data-page-node-id="S37zY2lLDDktgX9QqO7xRc">
+  <button class="reset" id="reset" data-page-node-id="mzEUkorG3LQLKhSaYBe6l8">重置存档</button>
+  <button class="mute" id="mute" title="声音开关" aria-label="声音开关">
+    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+      <!-- 喇叭主体 -->
+      <path class="speaker" d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor"/>
+      <!-- 声波（未静音时显示） -->
+      <g class="waves" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <path d="M15.5 8.5c1.6 1.6 1.6 5.4 0 7"/>
+        <path d="M18.5 5.5c3.4 3.4 3.4 9.6 0 13"/>
+      </g>
+      <!-- 关闭时的红斜线（默认隐藏） -->
+      <line class="cross" x1="4" y1="4" x2="20" y2="20"/>
+    </svg>
+  </button>
+
+  <!-- 标题页 -->
+  <div class="scene" data-s="title" data-page-node-id="3OsQL8ykfEOgaRpGg0NB2n">
+    <div class="bg bg-title" data-page-node-id="cBNydH4uuUHaOjJKnggHyD"></div>
+    <div class="title-hint" data-page-node-id="dYRNWH0jECP6pwpsZRcAoy">👆 点击屏幕开始营业</div>
+  </div>
+
+  <!-- 商场 -->
+  <div class="scene hidden" data-s="mall" data-page-node-id="d7cG7HWVcmiFHLEF6T2VIi">
+    <div class="bg bg-mall" data-page-node-id="IkmE3a20hZ3vR4yvLLX1TO"></div>
+    <div class="hud" data-page-node-id="3VGoUVJIW5WuA22c6ssltt">
+      <div data-page-node-id="S5imKRlpHCk9dLLI8CzOOw"></div>
+      <div class="money" data-page-node-id="8bOAU3C07Ry1Ml2sy1iww2"><span class="coin" data-page-node-id="t9s25dg4v5g3ibAAmtr0N3"></span><span id="m-money" data-page-node-id="8lV6mY7dCBttZ3Lnk3b7C1">0</span></div>
+    </div>
+    <div id="shop-grid" data-page-node-id="LSyWi4e5hODMW4m66xyalX"></div>
+    <div class="emp-badge" id="mall-emp-badge" style="display:none" data-page-node-id="p2kQr8M5nX1sHdY9BqvTzL"><span class="dot" data-page-node-id="d2kQr8M5nX1sHdY9BqvTzL"></span><span id="mall-emp-text" data-page-node-id="e2kQr8M5nX1sHdY9BqvTzL">员工后台上岗中</span></div>
+  </div>
+
+  <!-- 店内（第一人称） -->
+  <div class="scene hidden" data-s="shop" data-page-node-id="lHvW3tScrU0mJfoLdsXOJt">
+    <!-- L1 背景层：店铺内景（最底，不可交互） -->
+    <div class="layer layer-bg">
+      <div class="bg bg-shop" data-page-node-id="ICRFCyXDG78gBcU8PjrsTX"></div>
+    </div>
+
+    <!-- L2 顾客层：站在柜台外侧的顾客（倒数第二层，远景压暗） -->
+    <div class="layer layer-cust">
+      <div class="customers" id="customers" data-page-node-id="zMwh3wMgWJrySld5VslrcU"></div>
+    </div>
+
+    <!-- L3 备餐操作层：出餐台 + 后厨设备（最上层，离玩家最近的实体台面） -->
+    <div class="layer layer-prep">
+      <div class="prep-surface" id="prep-surface"></div>
+      <div class="trays" id="trays" data-page-node-id="Qi5KyaAsQT9pp7RiA2KdhR"></div>
+      <div class="devices" data-page-node-id="jz3qewnHtbGKxxfQjQ6HpB">
+        <div class="device-hint" id="dev-hint" data-page-node-id="Bshy3zhSJquCTM1uZSDU5Z">煎台 · 汉堡</div>
+      </div>
+    </div>
+
+    <!-- L4 UI 层：HUD / 徽章 / 按钮（浮在所有画面层之上） -->
+    <div class="layer layer-ui">
+      <div class="hud" data-page-node-id="9pjyKGiaHTRVHJwH6P6vLi">
+        <button class="back-btn" id="back-mall" data-page-node-id="h0lMauI6zueIUXjOyDIYwx">← 商场</button>
+        <span class="shop-name" id="shop-name" data-page-node-id="Q1FVyq0JprmzmsXviVeszq">1F-左</span>
+        <div class="money" data-page-node-id="2WNVXylV38JS5CfbDCK7PU"><span class="coin" data-page-node-id="2gCPSpWVWObU0dIfjHwmYX"></span><span id="s-money" data-page-node-id="XmSeLjgi7VARkUbXOcQntX">0</span></div>
+      </div>
+      <div class="emp-badge" id="emp-badge" style="display:none" data-page-node-id="4wpstWOTM1PObicpaXSDHi"><span class="dot" data-page-node-id="jEhkJ6EiY7xdPEfRHV86XO"></span><span id="emp-text" data-page-node-id="ZiqhirDGsmFzIWGPgBG1w3">员工工作中</span></div>
+      <button class="hire-btn" id="hire">雇员工 · 50 金币</button>
+    </div>
+  </div>
+
+  <div id="toast" data-page-node-id="ujAVnZwNIWpFlZL1U7TYUM"></div>
+</div>
+
+<script>
+/* ========== 配置 ========== */
+const TOTAL_SHOPS = 10;
+const MAX_CUSTOMERS = 3;
+const TRAY_MAX = 4;                // 每个托盘上限
+const UNLOCK_COSTS = [0, 30, 80, 150, 250, 400, 600, 850, 1200, 1700];
+const HIRE_BASE = 50;
+const CUSTOMER_IMG = 'assets/customer_kid.png';
+
+/* 食物档案：图片 + 名称（每家店只卖其中一种） */
+const DISH = {
+  burger:  {img:'assets/food_burger.png',   name:'汉堡'},
+  fries:   {img:'assets/food_fries.png',    name:'薯条'},
+  pizza:   {img:'assets/food_pizza.png',    name:'披萨'},
+  noodles: {img:'assets/food_noodles.png',  name:'拉面'},
+  sushi:   {img:'assets/food_sushi.png',    name:'寿司'},
+  hotpot:  {img:'assets/food_hotpot.png',   name:'火锅'},
+  coffee:  {img:'assets/food_coffee.png',   name:'咖啡'},
+  icecream:{img:'assets/food_icecream.png', name:'雪糕'},
+  chicken: {img:'assets/food_chicken.png',  name:'炸鸡'},
+  donut:   {img:'assets/food_donut.png',    name:'甜甜圈'},
+};
+
+/* 10 家差异化店铺：品类 / 售价 / 自动补货节奏 / 专属后厨背景 / 出餐台·顾客区·设备锚点坐标(%) */
+const SHOP_SPECIALTIES = [
+  {name:'美味汉堡', food:'burger',   price:5,  interval:2500,
+   bg:'assets/scene_shop_bare.png',   trayTop:45, custTop:12, custH:30, devTop:62, dev:'煎台'},
+  {name:'香脆薯条', food:'fries',    price:8,  interval:2900,
+   bg:'assets/shop_bg_fries.png',    trayTop:45, custTop:12, custH:30, devTop:62, dev:'炸锅'},
+  {name:'手工披萨', food:'pizza',    price:16, interval:4000,
+   bg:'assets/shop_bg_pizza.png',     trayTop:49, custTop:12, custH:30, devTop:58, dev:'砖窑'},
+  {name:'暖心面条', food:'noodles',  price:14, interval:3600,
+   bg:'assets/shop_bg_noodles.png',   trayTop:61, custTop:12, custH:30, devTop:68, dev:'煮面炉'},
+  {name:'元气寿司', food:'sushi',    price:22, interval:4400,
+   bg:'assets/shop_bg_sushi.png',     trayTop:43, custTop:12, custH:30, devTop:68, dev:'寿司台'},
+  {name:'沸腾火锅', food:'hotpot',   price:30, interval:5000,
+   bg:'assets/shop_bg_hotpot.png',    trayTop:58, custTop:12, custH:30, devTop:72, dev:'火锅灶'},
+  {name:'醇香咖啡', food:'coffee',   price:12, interval:2700,
+   bg:'assets/shop_bg_coffee.png',    trayTop:49, custTop:12, custH:30, devTop:60, dev:'咖啡机'},
+  {name:'甜心雪糕', food:'icecream', price:15, interval:3200,
+   bg:'assets/shop_bg_icecream.png',  trayTop:50, custTop:12, custH:30, devTop:60, dev:'冰淇淋机'},
+  {name:'香辣炸鸡', food:'chicken',  price:24, interval:4200,
+   bg:'assets/shop_bg_chicken.png',   trayTop:50, custTop:12, custH:30, devTop:58, dev:'炸锅'},
+  {name:'甜甜圈屋', food:'donut',    price:18, interval:3400,
+   bg:'assets/shop_bg_donut.png',     trayTop:57, custTop:12, custH:30, devTop:70, dev:'油炸锅'},
+];
+
+const EMP_INTERVAL = 2000;         // 员工每 2 秒尝试一次派单
+const SAVE_KEY = 'my_fastfood_demo_v4';
+
+/* 商场门面位置（由背景图逐层像素分析测得，% 为单位）与"已开业店铺"贴图
+   —— 贴图是按同一张背景图生成的，位置像素级对齐，解锁后直接盖住原来的灰色门面 */
+const SHOP_NAMES = SHOP_SPECIALTIES.map(s=>s.name);
+
+/* 该食物的售价（每家店一种招牌，售价记在店铺上） */
+function foodPrice(type){
+  const s = SHOP_SPECIALTIES.find(x=>x.food===type);
+  return s ? s.price : 0;
+}
+const FACADE = [
+  {l:19.5,   t:60.6,   w:26.5,   h:20.6,   img:null},                      // 1F-左：原图已有美术
+  {l:60.278, t:66.211, w:18.403, h:14.844, img:'assets/facade_1.png'},
+  {l:21.458, t:55.898, w:27.569, h:5.664,  img:'assets/facade_2.png'},
+  {l:52.500, t:55.898, w:27.431, h:9.766,  img:'assets/facade_3.png'},
+  {l:21.458, t:45.312, w:27.569, h:9.727,  img:'assets/facade_4.png'},
+  {l:52.500, t:45.312, w:27.431, h:9.727,  img:'assets/facade_5.png'},
+  {l:21.458, t:34.102, w:27.569, h:10.352, img:'assets/facade_6.png'},
+  {l:52.500, t:34.102, w:27.431, h:10.352, img:'assets/facade_7.png'},
+  {l:21.458, t:24.297, w:27.569, h:9.570,  img:'assets/facade_8.png'},
+  {l:52.500, t:24.297, w:27.431, h:9.570,  img:'assets/facade_9.png'},
+];
+const LOCK_SVG = '<svg viewBox="0 0 24 24"><path d="M7.5 10.5V7.5a4.5 4.5 0 019 0v3" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/><rect x="4" y="10.2" width="16" height="11.3" rx="2.6" fill="currentColor"/></svg>';
+
+/* ========== 状态 ========== */
+// 每个店铺持久化：unlocked 标志、employees 数、自动补货的库存、等待中的顾客队列
+// timers 是运行时存定时器 id，不进存档（每次启动重 boot）
+function defaultState(){ return { money:0, shops:Array.from({length:TOTAL_SHOPS},(_,i)=>({
+  unlocked:i===0,
+  employees:0,
+  stock:[],              // 本店招牌食物的库存（单一种类，最长 TRAY_MAX）
+  customers:[],
+  timers:{},
+}))}; }
+function load(){ try{ const s=JSON.parse(localStorage.getItem(SAVE_KEY));
+  if(s&&s.shops&&s.shops.length===TOTAL_SHOPS){
+    s.shops.forEach((sh,i)=>{
+      const spec = SHOP_SPECIALTIES[i];
+      // 兼容旧存档：stock 曾是 {burger,fries,cola} 三键对象，取本店招牌对应的那一份
+      if(sh.stock && !Array.isArray(sh.stock)) sh.stock = sh.stock[spec.food] || [];
+      if(!Array.isArray(sh.stock)) sh.stock = [];
+      // 旧存档里顾客可能点的是"别的店的招牌"，只保留本店的
+      sh.customers = (sh.customers||[]).filter(c=>c.wants===spec.food);
+      sh.timers = {};
+    });
+    s.money = s.money || 0;
+    return s;
+  }
+}catch(e){} return null; }
+function save(){ try{ const snap={money:state.money, shops:state.shops.map(sh=>({
+  unlocked:sh.unlocked, employees:sh.employees, stock:sh.stock, customers:sh.customers,
+}))}; localStorage.setItem(SAVE_KEY, JSON.stringify(snap)); }catch(e){} }
+let state = load() || defaultState();
+
+/* ========== 音效 ========== */
+let actx=null;
+const MUTE_KEY = 'my_fastfood_mute_v1';
+try{ var muted = JSON.parse(localStorage.getItem(MUTE_KEY) || 'false'); }catch(e){ var muted = false; }
+function ac(){ return actx || (actx=new (window.AudioContext||window.webkitAudioContext)()); }
+function beep(f,d,t,v){
+  try{(window.__beepLog=window.__beepLog||[]).push({f,n:t||'sine'})}catch(e){}
+  try{ const c=ac(),o=c.createOscillator(),g=c.createGain();
+  o.type=t||'sine'; o.frequency.value=f; const n=c.currentTime;
+  g.gain.setValueAtTime(v||0.08,n); g.gain.exponentialRampToValueAtTime(0.0001,n+d);
+  o.connect(g); g.connect(c.destination); o.start(n); o.stop(n+d);}catch(e){} }
+function sfx(n){
+  // 全局静音：优先级最高（玩家主动选择，整个应用都闭嘴）
+  if(muted) return;
+  if(actx&&actx.state==='suspended') actx.resume();
+  // 标题页静默：后台业务定时器照常跑（金币照涨），但任何业务音效都不打扰"还没开始游戏"的玩家
+  // 只保留 click 反馈——因为 click 是玩家主动触发的"进入游戏"动作，是合理的听觉反馈
+  const onTitle = document.querySelector('.scene[data-s="title"]:not(.hidden)');
+  if(onTitle && n!=='click') return;
+  if(n==='click')  beep(420,0.07,'square',0.05);
+  if(n==='coin'){  beep(880,0.09,'triangle',0.08); setTimeout(()=>beep(1320,0.09,'triangle',0.05),60); }
+  if(n==='unlock'){ beep(523,0.12,'sine',0.09); setTimeout(()=>beep(659,0.12,'sine',0.09),100); setTimeout(()=>beep(784,0.22,'sine',0.09),210); }
+  if(n==='serve'){ beep(660,0.07,'triangle',0.07); setTimeout(()=>beep(990,0.08,'triangle',0.06),50); }
+  if(n==='emp'){  beep(720,0.06,'square',0.05); setTimeout(()=>beep(1080,0.07,'square',0.04),45); }
+  if(n==='ready'){  beep(1200,0.06,'square',0.04); }
+}
+
+/* ========== 场景路由 ========== */
+function showScene(name){
+  document.querySelectorAll('.scene').forEach(s=>s.classList.add('hidden'));
+  document.querySelector('.scene[data-s="'+name+'"]').classList.remove('hidden');
+  if(name==='mall') renderMall();
+  if(name==='shop') enterShop();
+}
+// 任何由点击或脚本触发的"开始"都先 boot 一下所有已解锁店铺，确保后台业务在跑
+function bootAllShops(){
+  state.shops.forEach((sh,i)=>{ if(sh.unlocked) bootShop(i); });
+}
+document.querySelector('.scene[data-s="title"]').addEventListener('click', ()=>{ sfx('click'); bootAllShops(); showScene('mall'); });
+
+/* ========== M2 商场 ========== */
+function renderMall(){
+  document.getElementById('m-money').textContent = state.money;
+  // 任何已解锁店铺若未 boot，给它启动业务（页面刷新/解锁新店后生效）
+  state.shops.forEach((sh,i)=>{ if(sh.unlocked) bootShop(i); });
+  updateMallEmpBadge();
+  const grid=document.getElementById('shop-grid'); grid.innerHTML='';
+  for(let i=0;i<TOTAL_SHOPS;i++){
+    const sh=state.shops[i];
+    const f=FACADE[i];
+    const floor=Math.floor(i/2)+1;
+    const side=(i%2===0)?'左':'右';
+    const el=document.createElement('div');
+    el.style.left=f.l+'%'; el.style.top=f.t+'%';
+    el.style.width=f.w+'%'; el.style.height=f.h+'%';
+    if(sh.unlocked){
+      el.className='shop-slot on';
+      el.innerHTML = (f.img?`<img class="ss-facade" src="${f.img}" alt="">`:'')
+                   + `<div class="ss-enter">进入</div>`;
+      el.addEventListener('click',()=>{ sfx('click'); state.currentShop=i; showScene('shop'); });
+    }else{
+      const afford = state.money>=UNLOCK_COSTS[i];
+      el.className='shop-slot off'+(afford?' afford':'');
+      el.innerHTML = `<div class="ss-lock-badge">${LOCK_SVG}${UNLOCK_COSTS[i]}</div>`;
+      el.addEventListener('click',()=>{
+        if(state.money>=UNLOCK_COSTS[i]){
+          state.money-=UNLOCK_COSTS[i]; sh.unlocked=true; sfx('unlock'); save();
+          // 新解锁店立刻 boot 起来，让它在玩家做任何事之前就开始营业
+          bootShop(i);
+          renderMall();
+          document.getElementById('m-money').textContent=state.money;
+          toast(`解锁 ${floor}F-${side} · ${SHOP_NAMES[i]}！`);
+        } else toast('金币不足，再赚点');
+      });
+    }
+    grid.appendChild(el);
+  }
+}
+
+/* ========== M3 店内（业务全局后台运行） ========== */
+// viewShop 指向"当前正在看的店铺的状态"，等于 state.shops[currentShop]
+// 关键设计：业务定时器存到 state.shops[i].timers，离开店铺不会清，回到商场也继续运作
+let viewShop=null;
+
+/* —— 给某店铺启动所有后台定时器（幂等：已 boot 则 no-op） —— */
+function bootShop(idx){
+  const sh=state.shops[idx];
+  if(!sh.unlocked) return;
+  if(sh.timers && sh.timers.boot) return;     // 已 boot
+  sh.timers = sh.timers || {};
+  sh.timers.boot = true;
+  const spec = SHOP_SPECIALTIES[idx];
+
+  // 本店招牌食物自动补货（单一定时器）
+  sh.timers.prod = setInterval(()=>produceFor(idx), spec.interval);
+
+  // 顾客队列：每 3s 补一个（直到上限），同时启动 0.5s tick 倒计时
+  sh.timers.custSpawner = setInterval(()=>spawnCustomerFor(idx), 3000);
+  sh.timers.custTicker = setInterval(()=>tickCustomersFor(idx), 500);
+  // 进店立刻来一个
+  spawnCustomerFor(idx);
+  // 库存预热 1 份
+  if(sh.stock.length===0){
+    sh.stock.push({id:'f'+Date.now()+'_init'+Math.random().toString(36).slice(2,4), type:spec.food});
+  }
+
+  // 雇员工自动派单
+  if(sh.employees>0) startEmployeeAutoFor(idx);
+}
+
+/* —— 给某店铺停止所有后台（仅在重置存档时调用） —— */
+function stopShop(idx){
+  const sh=state.shops[idx];
+  if(!sh.timers || !sh.timers.boot) return;
+  if(sh.timers.prod) clearInterval(sh.timers.prod);
+  if(sh.timers.custSpawner) clearInterval(sh.timers.custSpawner);
+  if(sh.timers.custTicker) clearInterval(sh.timers.custTicker);
+  if(sh.timers.emp) clearInterval(sh.timers.emp);
+  sh.timers = {};
+}
+function stopAllShops(){ state.shops.forEach((_,i)=>stopShop(i)); }
+
+/* —— 进入店铺（切视图：换专属后厨背景 + 布局坐标，不启动/停止业务） —— */
+function enterShop(){
+  const i=state.currentShop;
+  const spec=SHOP_SPECIALTIES[i];
+  const floor=Math.floor(i/2)+1, side=(i%2===0)?'左':'右';
+  document.getElementById('shop-name').textContent = floor+'F-'+side+' · '+spec.name;
+  document.getElementById('s-money').textContent=state.money;
+
+  // 该店专属后厨背景
+  document.querySelector('.scene[data-s="shop"] .bg-shop').style.backgroundImage = `url('${spec.bg}')`;
+  // 出餐台 / 顾客区 / 设备锚点，按该店背景的实际台面位置摆放
+  document.getElementById('trays').style.top = spec.trayTop+'%';
+  // L3 台面：铺到屏幕底部，形成"近景实体台面"。
+  // 顶边取「顾客带下沿」与「出餐台」之间，既托住出餐台，又绝不遮挡顾客与其耐心计时。
+  const prep=document.getElementById('prep-surface');
+  if(prep){
+    const custBottom = spec.custTop + spec.custH;
+    let pt = (custBottom + spec.trayTop) / 2;
+    pt = Math.min(pt, spec.trayTop - 1.5);
+    pt = Math.max(pt, custBottom + 0.5);
+    prep.style.top = pt.toFixed(1)+'%';
+  }
+  const custBox=document.getElementById('customers');
+  custBox.style.top  = spec.custTop+'%';
+  custBox.style.height = spec.custH+'%';
+  document.querySelector('.devices').style.top = spec.devTop+'%';
+  const devHint=document.getElementById('dev-hint');
+  devHint.textContent = spec.dev+' · '+DISH[spec.food].name;
+
+  bootShop(i);                       // 没 boot 就 boot；已 boot 就 no-op
+  viewShop = state.shops[i];         // viewShop = 该店引用
+
+  buildTrays(spec.food);
+  renderTray(spec.food);
+  renderCustomers();
+  updateHireBtn();
+  updateEmpBadge();
+}
+
+/* —— 出餐台：单托盘（本店招牌食物），最多 TRAY_MAX 份，自动补货 —— */
+function buildTrays(type){
+  const wrap=document.getElementById('trays'); wrap.innerHTML='';
+  const t = type || SHOP_SPECIALTIES[state.currentShop].food;
+  const tray=document.createElement('div'); tray.className='tray'; tray.dataset.type=t;
+  tray.innerHTML=`<div class="tray-label">${DISH[t].name} · 出餐台</div><div class="tray-slots" data-slots="${t}"></div>`;
+  wrap.appendChild(tray);
+  const slotsEl=tray.querySelector('.tray-slots');
+  for(let i=0;i<TRAY_MAX;i++){
+    const s=document.createElement('div'); s.className='tray-slot'; s.dataset.idx=i; s.dataset.type=t;
+    s.addEventListener('pointerdown', e=>onPickUp(e, s, t));
+    slotsEl.appendChild(s);
+  }
+}
+
+/* —— 渲染当前店铺的托盘（仅在 viewShop 存在时碰 DOM） —— */
+function renderTray(type){
+  if(!viewShop) return;
+  const t = type || SHOP_SPECIALTIES[state.currentShop].food;
+  const items=viewShop.stock;
+  const slots=document.querySelectorAll('#trays .tray-slot');
+  if(!slots.length) return;
+  slots.forEach((s,i)=>{
+    const f=items[i];
+    if(f){
+      s.classList.add('filled');
+      if(!s.querySelector('img')){
+        const img=document.createElement('img'); img.src=DISH[t].img;
+        s.innerHTML=''; s.appendChild(img);
+      }
+    } else { s.classList.remove('filled'); s.innerHTML=''; }
+  });
+}
+
+/* —— 自动补货：直接对 state.shops[idx].stock 写入，DOM 端按需重绘 —— */
+function produceFor(idx){
+  const sh=state.shops[idx];
+  if(!sh || !sh.unlocked) return;
+  if(sh.stock.length>=TRAY_MAX) return;
+  const spec=SHOP_SPECIALTIES[idx];
+  const id='f'+Date.now()+'_'+spec.food+'_'+Math.random().toString(36).slice(2,5);
+  sh.stock.push({id, type:spec.food});
+  if(viewShop===sh && state.currentShop===idx){
+    sfx('ready');
+    renderTray(spec.food);
+  }
+  save();
+}
+
+/* —— 在某店铺尝试加一个顾客（不超过上限）—— */
+function spawnCustomerFor(idx){
+  const sh=state.shops[idx];
+  if(!sh || !sh.unlocked) return;
+  if(sh.customers.length>=MAX_CUSTOMERS) return;
+  const spec=SHOP_SPECIALTIES[idx];
+  const now=Date.now();
+  sh.customers.push({id:'c'+now+'_'+Math.random().toString(36).slice(2,5), wants:spec.food, timeLeft:20, bornAt:now});
+  if(viewShop===sh) renderCustomers();
+}
+
+/* —— 顾客倒计时 0.5s tick：到 0 就走人 —— */
+function tickCustomersFor(idx){
+  const sh=state.shops[idx];
+  if(!sh || !sh.unlocked) return;
+  let expired=false;
+  sh.customers.forEach(c=>{ c.timeLeft=Math.max(0, c.timeLeft-0.5); if(c.timeLeft<=0) expired=true; });
+  // 渲染：店内更新文案
+  if(viewShop===sh){
+    if(expired){
+      sh.customers = sh.customers.filter(c=>c.timeLeft>0);
+      renderCustomers();
+      toast('顾客等太久走啦…');
+      save();
+    } else {
+      document.querySelectorAll('.customer').forEach(el=>{
+        const cu=sh.customers.find(c=>String(c.id)===el.dataset.id);
+        if(cu){ const t=el.querySelector('.timer'); if(t) t.textContent=Math.ceil(cu.timeLeft)+'s'; }
+      });
+    }
+  } else if(expired){
+    sh.customers = sh.customers.filter(c=>c.timeLeft>0);
+    save();
+  }
+}
+
+/* —— 顾客视图（DOM）—— */
+function renderCustomers(){
+  if(!viewShop) return;
+  const c=document.getElementById('customers'); c.innerHTML='';
+  viewShop.customers.forEach(cu=>{
+    const el=document.createElement('div'); el.className='customer'; el.dataset.id=cu.id;
+    el.innerHTML=`<div class="bubble"><img src="${DISH[cu.wants].img}" alt=""></div>
+      <img class="cface" src="${CUSTOMER_IMG}" alt="">
+      <div class="timer">${Math.ceil(cu.timeLeft)}s</div>`;
+    c.appendChild(el);
+  });
+}
+
+/* —— 拖拽交付 —— */
+function onPickUp(e, slotEl, type){
+  if(!viewShop) return;
+  const idx=parseInt(slotEl.dataset.idx,10);
+  const item=viewShop.stock[idx];
+  if(!item) return;
+  e.preventDefault();
+  const r=slotEl.getBoundingClientRect();
+  const offX=e.clientX-r.left, offY=e.clientY-r.top;
+  const ghost=document.createElement('div'); ghost.className='ghost';
+  ghost.style.left=r.left+'px'; ghost.style.top=r.top+'px';
+  ghost.style.width=r.width+'px'; ghost.style.height=r.height+'px';
+  ghost.innerHTML=`<img src="${DISH[type].img}" alt="">`;
+  document.body.appendChild(ghost);
+
+  const move=ev=>{
+    ghost.style.left=(ev.clientX-offX)+'px'; ghost.style.top=(ev.clientY-offY)+'px';
+    document.querySelectorAll('.customer').forEach(x=>x.classList.remove('drop'));
+    const el=ev.target&&ev.target.closest && null;  // placeholder（不再用 elementFromPoint 抓指头）
+    const ce=document.elementFromPoint(ev.clientX,ev.clientY)?.closest?.('.customer');
+    if(ce) ce.classList.add('drop');
+  };
+  const up=ev=>{
+    window.removeEventListener('pointermove',move);
+    window.removeEventListener('pointerup',up);
+    document.querySelectorAll('.customer').forEach(x=>x.classList.remove('drop'));
+    const ce=document.elementFromPoint(ev.clientX,ev.clientY)?.closest?.('.customer');
+    if(ce){
+      const cu=viewShop.customers.find(c=>String(c.id)===ce.dataset.id);
+      if(cu && cu.wants===type) serveInShop(type, idx, cu.id, false);
+      else toast('这个顾客不想吃'+DISH[type].name);
+    }
+    ghost.remove();
+  };
+  window.addEventListener('pointermove',move);
+  window.addEventListener('pointerup',up);
+}
+
+/* —— 实际交付：写状态 + 给钱 + 视图更新 —— */
+function serveInShop(type, slotIdx, custId, byEmp){
+  if(!viewShop) return;
+  const sh=viewShop;
+  const cu = sh.customers.find(c=>String(c.id)===String(custId));
+  if(!cu) return;
+  if(byEmp) spawnEmpMark(cu);               // 顾客位置上飘"员工已送"
+  // 状态改写
+  sh.stock.splice(slotIdx,1);
+  sh.customers = sh.customers.filter(c=>String(c.id)!==String(custId));
+  state.money += foodPrice(type);
+  // HUD 同步（无所谓在哪个场景）
+  const shopMoney = document.getElementById('s-money'); if(shopMoney) shopMoney.textContent=state.money;
+  const mallMoney = document.getElementById('m-money'); if(mallMoney) mallMoney.textContent=state.money;
+  spawnFloatCoin(type);
+  sfx(byEmp ? 'emp' : 'serve');
+  renderTray(type);
+  renderCustomers();
+  updateHireBtn();
+  updateMallEmpBadge();
+  save();
+  if(sh.customers.length<MAX_CUSTOMERS) spawnCustomerFor(state.shops.indexOf(sh));
+}
+
+/* —— 雇员工自动派单（每个店一份，按店存定时器） —— */
+function startEmployeeAutoFor(idx){
+  const sh=state.shops[idx];
+  if(sh.timers.emp) return;          // 已存在就不再启
+  sh.timers.emp = setInterval(()=>{
+    if(!sh.unlocked) return;
+    const numEmp = sh.employees;
+    if(numEmp<=0) return;
+    // 紧急度优先：timeLeft 升序
+    const urgent = sh.customers
+      .filter(cu => sh.stock.length > 0)
+      .sort((a,b)=>a.timeLeft-b.timeLeft);
+    let served = 0;
+    for(const cu of urgent){
+      if(served >= numEmp) break;
+      // 如果该店当前正在被查看，直接调用视图侧 serveInShop；否则走一个纯状态版本
+      if(viewShop===sh){
+        serveInShop(cu.wants, sh.stock.length-1, cu.id, true);
+      } else {
+        serveAwayFromView(idx, cu.wants, sh.stock.length-1, cu.id);
+      }
+      served++;
+    }
+  }, EMP_INTERVAL);
+}
+
+/* —— 后台派单（玩家不在该店时；只动状态，不动店铺 DOM，仅顶部 HUD + 飘字）—— */
+function serveAwayFromView(idx, type, slotIdx, custId){
+  const sh=state.shops[idx];
+  if(!sh) return;
+  sh.stock.splice(slotIdx,1);
+  sh.customers = sh.customers.filter(c=>String(c.id)!==String(custId));
+  state.money += foodPrice(type);
+  const mallMoney=document.getElementById('m-money'); if(mallMoney) mallMoney.textContent=state.money;
+  const shopMoney=document.getElementById('s-money'); if(shopMoney) shopMoney.textContent=state.money;
+  spawnFloatCoin(type);
+  sfx('emp');
+  // 在飘字里加上"店"信息
+  updateHireBtn();
+  updateMallEmpBadge();
+  save();
+  if(sh.customers.length<MAX_CUSTOMERS) spawnCustomerFor(idx);
+}
+
+/* —— 店内：雇员工按钮文案与徽章 —— */
+function updateHireBtn(){
+  if(state.currentShop==null) return;       // 在商场时没有"当前店铺"
+  const i=state.shops[state.currentShop].employees;
+  const cost=HIRE_BASE*(i+1);
+  const btn=document.getElementById('hire');
+  btn.textContent = i>0 ? `雇员工 · ${cost} 金币（当前 ${i} 人）` : `雇员工 · ${cost} 金币`;
+  btn.disabled=state.money<cost;
+}
+function updateEmpBadge(){
+  if(state.currentShop==null){
+    const b=document.getElementById('emp-badge'); if(b) b.style.display='none';
+    return;
+  }
+  const i=state.shops[state.currentShop].employees;
+  const badge=document.getElementById('emp-badge');
+  badge.style.display = i>0 ? 'flex' : 'none';
+  document.getElementById('emp-text').textContent = i>0
+    ? `员工 x${i} · 每 ${EMP_INTERVAL/1000}s 送 ${i} 单`
+    : '';
+}
+
+/* —— 商场：总员工徽章 —— */
+function updateMallEmpBadge(){
+  const total = state.shops.reduce((a,sh)=>a+(sh.employees||0), 0);
+  const badge=document.getElementById('mall-emp-badge');
+  if(!badge) return;
+  if(total>0){
+    badge.style.display='flex';
+    document.getElementById('mall-emp-text').textContent =
+      `全员 ${total} 名员工后台上岗中 · 每 2s 最多送 ${total} 单`;
+  } else { badge.style.display='none'; }
+}
+
+// 雇员工：用 document 级委托，抗编辑器 DOM 重注入（按钮节点被替换后仍能响应）
+document.addEventListener('click',(e)=>{
+  const btn=e.target.closest && e.target.closest('#hire');
+  if(!btn || btn.disabled) return;
+  const idx=state.currentShop;
+  if(idx==null) return;
+  const i=state.shops[idx].employees, cost=HIRE_BASE*(i+1);
+  if(state.money<cost) return;
+  state.money-=cost; state.shops[idx].employees++;
+  document.getElementById('s-money').textContent=state.money;
+  document.getElementById('m-money').textContent=state.money;
+  sfx('unlock');
+  // 启动/刷新该店的员工定时器
+  startEmployeeAutoFor(idx);
+  updateHireBtn();
+  updateEmpBadge();
+  updateMallEmpBadge();
+  save();
+  toast(`员工 x${i+1} 上岗！`);
+});
+
+document.getElementById('back-mall').addEventListener('click',()=>{
+  // 关键改动：不再 clearTimers / shopState=null —— 业务保留
+  viewShop=null;
+  showScene('mall');
+});
+
+/* ========== toast / 飘字 ========== */
+let toastT=null;
+function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.classList.add('show');
+  clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('show'),1100); }
+function spawnFloatCoin(type){
+  // 当前可见的金币胶囊：店内/商场两者中可见的那个
+  const target = document.querySelector('.scene:not(.hidden) #m-money')
+              || document.querySelector('.scene:not(.hidden) #s-money');
+  if(!target) return;
+  const r=target.getBoundingClientRect();
+  const f=document.createElement('div'); f.className='float-coin';
+  f.textContent='+'+foodPrice(type);
+  f.style.left=(r.left+r.width/2-12)+'px'; f.style.top=(r.top+r.height/2-12)+'px';
+  document.body.appendChild(f); setTimeout(()=>f.remove(),900);
+}
+/* 员工派单的可视标记：在顾客原位飘一个"员工已送" */
+function spawnEmpMark(cust){
+  const el=document.querySelector('.customer[data-id="'+cust.id+'"]');
+  if(!el) return;
+  const r=el.getBoundingClientRect();
+  const d=document.createElement('div'); d.className='emp-mark';
+  d.textContent='员工已送';
+  d.style.left=(r.left+r.width/2)+'px';
+  d.style.top=(r.top+r.height*0.35)+'px';
+  document.body.appendChild(d); setTimeout(()=>d.remove(),800);
+}
+
+/* ========== 重置 ========== */
+document.getElementById('reset').addEventListener('click',()=>{
+  if(!confirm('确定重置所有进度？')) return;
+  localStorage.removeItem(SAVE_KEY);
+  stopAllShops();
+  viewShop=null;
+  state=defaultState();
+  showScene('title');
+  toast('已重置');
+});
+
+/* ========== 静音开关 ========== */
+const muteBtn = document.getElementById('mute');
+function syncMuteUI(){
+  muteBtn.classList.toggle('muted', !!muted);
+  muteBtn.title = muted ? '点击开启声音' : '点击静音';
+}
+muteBtn.addEventListener('click',(e)=>{
+  e.stopPropagation();                      // 防止冒泡到 title scene（点击开局）
+  muted = !muted;
+  try{ localStorage.setItem(MUTE_KEY, JSON.stringify(muted)); }catch(_){}
+  syncMuteUI();
+});
+syncMuteUI();
+
+/* ========== 启动 ========== */
+// 从 localStorage 恢复存档后，给所有已解锁店铺 boot 一次（业务立即恢复）
+bootAllShops();
+showScene('title');
+</script>
+</body>
+</html>

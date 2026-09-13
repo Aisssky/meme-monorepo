@@ -1,0 +1,14 @@
+# 本地二进制资源：已上传 TOS，由 dist/index.html 用公网 URL 引用，不随源码提交
+assets/
+
+# 开发 / 调试临时文件
+_*.cjs
+_*.py
+_*.js
+_*.png
+_*.md
+*.md
+
+# 工具与内存目录
+.workbuddy/
+.memeskill/
