@@ -9,53 +9,25 @@
     "size": "1440x2560",
     "label": "游戏封面"
   },
-  "initial_battery": {
-    "value": 20,
-    "type": "int",
-    "label": "初始电量",
-    "min": 5,
-    "max": 50
-  },
   "round_seconds": {
     "value": 30,
     "type": "int",
-    "label": "倒计时秒数",
+    "label": "参考时长(秒)",
     "min": 15,
     "max": 60
   },
-  "natural_drain_per_sec": {
-    "value": 1.5,
-    "type": "float",
-    "label": "自然掉电",
-    "min": 0.5,
-    "max": 5
-  },
-  "correct_close_gain": {
-    "value": 1.5,
-    "type": "float",
-    "label": "关对回电",
-    "min": 0.5,
-    "max": 5
-  },
-  "fake_close_penalty": {
-    "value": 3.0,
-    "type": "float",
-    "label": "假关闭惩罚",
+  "initial_lives": {
+    "value": 3,
+    "type": "int",
+    "label": "初始生命(颗心)",
     "min": 1,
-    "max": 10
+    "max": 5
   },
-  "item_charge_gain": {
-    "value": 8.0,
-    "type": "float",
-    "label": "道具回电",
-    "min": 3,
-    "max": 20
-  },
-  "item_time_bonus": {
-    "value": 1.0,
-    "type": "float",
-    "label": "道具时间奖励",
-    "min": 0,
+  "max_lives": {
+    "value": 3,
+    "type": "int",
+    "label": "生命上限",
+    "min": 1,
     "max": 5
   },
   "max_popups_on_screen": {
@@ -149,6 +121,20 @@
     "min": 1500,
     "max": 6000
   },
+  "item_life_gain": {
+    "value": 1,
+    "type": "int",
+    "label": "道具回心数",
+    "min": 1,
+    "max": 3
+  },
+  "item_score_when_full": {
+    "value": 30,
+    "type": "int",
+    "label": "满心时道具折算分",
+    "min": 0,
+    "max": 100
+  },
   "neon_cyan": {
     "value": "#00f0ff",
     "type": "color",
@@ -188,6 +174,13 @@
     "min": 0,
     "max": 30
   },
+  "fake_close_life_penalty": {
+    "value": 1,
+    "type": "int",
+    "label": "误点假×扣心",
+    "min": 1,
+    "max": 3
+  },
   "score_item": {
     "value": 20,
     "type": "int",
@@ -208,6 +201,13 @@
     "label": "完赛奖励",
     "min": 0,
     "max": 200
+  },
+  "score_time_bonus_per_sec": {
+    "value": 5,
+    "type": "int",
+    "label": "每快1秒得分",
+    "min": 0,
+    "max": 20
   },
   "landing_enabled": {
     "value": true,
@@ -233,12 +233,12 @@
     "type": "bool",
     "label": "点广告本体也跳转"
   },
-  "landing_body_battery_penalty": {
-    "value": 2.0,
-    "type": "float",
-    "label": "点本体额外扣电",
-    "min": 0,
-    "max": 10
+  "landing_body_life_penalty": {
+    "value": 1,
+    "type": "int",
+    "label": "点本体扣几颗心",
+    "min": 1,
+    "max": 3
   },
   "image_background": {
     "value": "https://ppy-test.tos-cn-beijing.volces.com/images/0a0a99e7-e73f-436f-b6b8-7d447e9d13fc.png",
@@ -372,20 +372,6 @@
     "image_type": "Asset",
     "size": "1024x1024",
     "label": "日历图标"
-  },
-  "item_battery": {
-    "value": "https://ppy-test.tos-cn-beijing.volces.com/cutout/95918ee3-f733-44d3-bb02-e49050bf7d3b.png",
-    "type": "image",
-    "image_type": "Asset",
-    "size": "1024x1024",
-    "label": "省电电池"
-  },
-  "item_lightning": {
-    "value": "https://ppy-test.tos-cn-beijing.volces.com/cutout/79e572c2-6c21-4e9c-a3ff-fea76032e979.png",
-    "type": "image",
-    "image_type": "Asset",
-    "size": "1024x1024",
-    "label": "闪电道具"
   },
   "bgm_main": {
     "value": "https://vibe-writing-dev-public.tos-cn-beijing.volces.com/bgm/%E8%BF%9E%E5%87%BB%E6%8C%91%E6%88%981.mp3",

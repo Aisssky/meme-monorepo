@@ -3,13 +3,15 @@
  */
 
 export interface GameConfig {
-  initial_battery: number;
+  /** 初始生命（颗心）。生命为整数资源，归零即失败 —— 这是本作唯一的失败条件。 */
+  initial_lives: number;
+  /** 生命上限（同时也是 UI 上最多显示几颗心） */
+  max_lives: number;
+  /**
+   * 本关参考时长（秒）。**不再作为失败条件**，仅用于结算评分：
+   * 用时越短，速度奖励越高。
+   */
   round_seconds: number;
-  natural_drain_per_sec: number;
-  correct_close_gain: number;
-  fake_close_penalty: number;
-  item_charge_gain: number;
-  item_time_bonus: number;
   max_popups_on_screen: number;
   popup_spawn_min_ms: number;
   popup_spawn_max_ms: number;
@@ -25,6 +27,10 @@ export interface GameConfig {
   item_interval_min_ms: number;
   item_interval_max_ms: number;
   item_lifetime_ms: number;
+  /** 拾取爱心道具回复的生命数（不超过 max_lives） */
+  item_life_gain: number;
+  /** 生命已满时拾取爱心道具，折算成的分数 */
+  item_score_when_full: number;
   neon_cyan: string;
   neon_magenta: string;
   neon_purple: string;
@@ -32,15 +38,19 @@ export interface GameConfig {
   card_bg: string;
   score_correct: number;
   score_fake_penalty: number;
+  /** 误点假×扣几颗心（与 landing_body_life_penalty 对应） */
+  fake_close_life_penalty: number;
   score_item: number;
   score_miss_item: number;
   score_win_bonus: number;
+  /** 每比参考时长快 1 秒获得的分数（速度奖励） */
+  score_time_bonus_per_sec: number;
   // 误点 → 跳转广告落地页（新增玩法）
   landing_enabled: boolean;             // 总开关
   landing_hold_ms: number;              // 落地页自动关闭时长
   landing_min_hold_ms: number;          // 最短停留（之后可点击提前返回）
-  landing_body_enabled: boolean;        // 点广告本体（非按钮区）是否也跳转
-  landing_body_battery_penalty: number; // 点本体时的额外扣电
+  landing_body_enabled: boolean;       // 点广告本体（非按钮区）是否也跳转
+  landing_body_life_penalty: number;   // 点本体时扣几颗心
   image_background: string;
   // 弹窗卡片（整张带文案的广告图，2304x1728）
   card_shop: string;
@@ -56,8 +66,6 @@ export interface GameConfig {
   page_rogue: string;
   page_redpack: string;
   page_booster: string;
-  item_battery: string;
-  item_lightning: string;
   // 音频（CDN 托管，运行时按 key 注入 loader）
   bgm_main: string;
   sfx_ad_close: string;
@@ -93,6 +101,9 @@ export interface PopupTypeDef {
 /**
  * 关卡定义。由 MenuScene 选择，scene.start('GameScene',{ levelId }) 传入。
  * 难度叠加型递进：每关 totalAdCount 更多、广告种类更多、同屏更多更快、弹窗尺寸范围更宽。
+ *
+ * 胜负（生命制）：把本关全部广告正确关掉即通关；生命（心）被扣光即失败。
+ * roundSeconds 只用于结算评分，不再是失败线。
  */
 export interface LevelDef {
   id: number;
@@ -100,9 +111,8 @@ export interface LevelDef {
   title: string;              // 结算标题文案
   description: string;        // 菜单卡片副标题
   totalAdCount: number;       // 本关要出的广告总数（出完即停）
-  roundSeconds: number;       // 倒计时
-  initialBattery: number;     // 初始电量
-  naturalDrainPerSec: number; // 自然掉电速率
+  roundSeconds: number;       // 参考时长（秒），用于结算速度奖励
+  initialLives: number;       // 初始生命（颗心）
   spawnMinMs: number;         // 最小生成间隔
   spawnMaxMs: number;         // 最大生成间隔
   popupPoolIds: string[];     // 本关可抽到的广告 id（来自 POPUP_POOL）
@@ -139,7 +149,8 @@ export interface ScoreSnapshot {
   fakeClicks: number;
   itemsCollected: number;
   itemsMissed: number;
-  finalBattery: number;
+  /** 结算时剩余的生命数（颗心） */
+  finalLives: number;
   survived: boolean;
   elapsedMs: number;
   /** 本局被广告带走（误点跳转落地页）的次数 */

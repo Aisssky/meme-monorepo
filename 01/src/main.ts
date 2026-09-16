@@ -43,8 +43,6 @@ async function bootstrap() {
     page_rogue: 'page_rogue',
     page_redpack: 'page_redpack',
     page_booster: 'page_booster',
-    item_battery: 'it_battery',
-    item_lightning: 'it_lightning',
   };
   const imageUrls: Record<string, string> = {
     image_background: cfg.image_background,
@@ -60,8 +58,6 @@ async function bootstrap() {
     page_rogue: cfg.page_rogue,
     page_redpack: cfg.page_redpack,
     page_booster: cfg.page_booster,
-    item_battery: cfg.item_battery,
-    item_lightning: cfg.item_lightning,
   };
 
   const preloadScene = new PreloadScene();

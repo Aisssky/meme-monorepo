@@ -167,7 +167,7 @@ export class MenuScene extends Phaser.Scene {
       const descMaxW = cardW - 48 - 56; // 左 24 边距 + 徽标占位 56
       c.add(
         this.add
-          .text(-cardW / 2 + 24, cardH / 2 - 22, `${lv.description} · ${lv.roundSeconds}s`, {
+          .text(-cardW / 2 + 24, cardH / 2 - 22, `${lv.description} · 参考${lv.roundSeconds}s`, {
             fontFamily: '"Microsoft YaHei","PingFang SC",sans-serif',
             fontSize: '15px',
             color: isUnlocked ? '#dddddd' : '#666666',

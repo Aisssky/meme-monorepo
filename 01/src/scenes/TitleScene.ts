@@ -53,7 +53,7 @@ export class TitleScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
     const hint = this.add
-      .text(width / 2, height * 0.36, '倒计时内关掉全部广告 · 别点假× · 别让手机没电', {
+      .text(width / 2, height * 0.36, '关掉全部广告 · 别点假× · 别把心扣光', {
         fontFamily: '"Microsoft YaHei","PingFang SC",sans-serif',
         fontSize: '16px',
         color: '#ffffff',

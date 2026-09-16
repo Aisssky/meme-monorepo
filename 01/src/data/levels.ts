@@ -3,10 +3,10 @@
  *  - 每一关要出的广告总数变多
  *  - 关卡越靠后，广告「种类」越多（解锁 doubleX / fullscreen 等更难辨别的广告）
  *  - 同屏弹窗上限 / 生成速度逐关提升
- *  - 弹窗尺寸范围逐关更极端（更大/更小都有），自然掉电也更快
+ *  - 弹窗尺寸范围逐关更极端（更大/更小都有）
  *
- * 胜利条件（玩家口径）：在倒计时结束前，把本关出现的全部广告都关掉即成功；
- * 时间到仍有未关广告 / 电量归零 → 失败。
+ * 生命制（玩家口径）：把本关出现的全部广告都关掉即通关；
+ * 误点会被扣心，生命扣光 → 失败。roundSeconds 只用于结算速度奖励，不是失败线。
  */
 import type { LevelDef } from '../types';
 
@@ -18,8 +18,7 @@ export const LEVELS: LevelDef[] = [
     description: '10 条广告 · 识破普通弹窗的假×陷阱',
     totalAdCount: 10,
     roundSeconds: 30,
-    initialBattery: 20,
-    naturalDrainPerSec: 1.5,
+    initialLives: 3,
     spawnMinMs: 750,
     spawnMaxMs: 1350,
     // 仅常规广告（normal），先熟悉"假×固定右上"的经典陷阱
@@ -37,8 +36,7 @@ export const LEVELS: LevelDef[] = [
     description: '16 条广告 · 新增「双×迷惑」，真假难辨',
     totalAdCount: 16,
     roundSeconds: 36,
-    initialBattery: 22,
-    naturalDrainPerSec: 1.8,
+    initialLives: 3,
     spawnMinMs: 560,
     spawnMaxMs: 1000,
     // 新增 scam（双×迷惑）
@@ -56,8 +54,7 @@ export const LEVELS: LevelDef[] = [
     description: '24 条广告 · 全屏弹窗 + 双×连环轰炸',
     totalAdCount: 24,
     roundSeconds: 42,
-    initialBattery: 25,
-    naturalDrainPerSec: 2.2,
+    initialLives: 3,
     spawnMinMs: 420,
     spawnMaxMs: 760,
     // 新增 redpack（全屏广告）
@@ -75,8 +72,7 @@ export const LEVELS: LevelDef[] = [
     description: '32 条广告 · 双×迷惑变多，见缝就钻',
     totalAdCount: 32,
     roundSeconds: 52,
-    initialBattery: 26,
-    naturalDrainPerSec: 2.3,
+    initialLives: 3,
     spawnMinMs: 360,
     spawnMaxMs: 640,
     // scam 重复两次 → 双×迷惑占比更高
@@ -97,8 +93,7 @@ export const LEVELS: LevelDef[] = [
     description: '36 条广告 · 首现全屏弹窗，真×藏底',
     totalAdCount: 36,
     roundSeconds: 58,
-    initialBattery: 27,
-    naturalDrainPerSec: 2.4,
+    initialLives: 3,
     spawnMinMs: 330,
     spawnMaxMs: 580,
     popupPoolIds: [
@@ -118,8 +113,7 @@ export const LEVELS: LevelDef[] = [
     description: '40 条广告 · 双×成群，真假更难分',
     totalAdCount: 40,
     roundSeconds: 62,
-    initialBattery: 28,
-    naturalDrainPerSec: 2.4,
+    initialLives: 3,
     spawnMinMs: 305,
     spawnMaxMs: 540,
     popupPoolIds: [
@@ -139,8 +133,7 @@ export const LEVELS: LevelDef[] = [
     description: '42 条广告 · 全屏广告猛增，遮天蔽日',
     totalAdCount: 42,
     roundSeconds: 66,
-    initialBattery: 28,
-    naturalDrainPerSec: 2.5,
+    initialLives: 3,
     spawnMinMs: 285,
     spawnMaxMs: 500,
     popupPoolIds: [
@@ -160,8 +153,7 @@ export const LEVELS: LevelDef[] = [
     description: '45 条广告 · 又小又刁，弹窗满天飞',
     totalAdCount: 45,
     roundSeconds: 70,
-    initialBattery: 29,
-    naturalDrainPerSec: 2.5,
+    initialLives: 3,
     spawnMinMs: 275,
     spawnMaxMs: 470,
     popupPoolIds: [
@@ -181,8 +173,7 @@ export const LEVELS: LevelDef[] = [
     description: '46 条广告 · 密集轰炸，眼花缭乱',
     totalAdCount: 46,
     roundSeconds: 74,
-    initialBattery: 30,
-    naturalDrainPerSec: 2.6,
+    initialLives: 3,
     spawnMinMs: 265,
     spawnMaxMs: 445,
     popupPoolIds: [
@@ -203,8 +194,7 @@ export const LEVELS: LevelDef[] = [
     description: '48 条广告 · 终极试炼，手机能否幸存？',
     totalAdCount: 48,
     roundSeconds: 78,
-    initialBattery: 30,
-    naturalDrainPerSec: 2.7,
+    initialLives: 3,
     spawnMinMs: 250,
     spawnMaxMs: 420,
     popupPoolIds: [

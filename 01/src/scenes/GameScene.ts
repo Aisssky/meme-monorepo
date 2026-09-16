@@ -3,6 +3,13 @@ import type { GameConfig, LevelDef, PopupTypeDef, ScoreSnapshot } from '../types
 import { pickRandomPopupType } from '../data/popupPool';
 import { getLevel, unlockLevel } from '../data/levels';
 import { playBgm, playSfx, stopAudio, AUDIO } from '../audio/AudioManager';
+import {
+  ensureHeartTextures,
+  heartBreak,
+  TEX_HEART_FULL,
+  TEX_HEART_EMPTY,
+  TEX_HEART_ITEM,
+} from '../gfx/hearts';
 
 /**
  * 根据角位 + 里/外贴边，计算真关闭按钮中心相对弹窗的坐标。
@@ -268,7 +275,7 @@ class PopupCard {
   }
 }
 
-/** 省电道具：电池/闪电 飘过屏幕 */
+/** 回血道具：一颗爱心飘过屏幕，点到 +1 生命 */
 class PowerItem {
   public sprite!: Phaser.GameObjects.Image;
   public glow!: Phaser.GameObjects.Rectangle;
@@ -296,17 +303,19 @@ class PowerItem {
     this.onCollect = onCollect;
     this.onMiss = onMiss;
 
-    this.glow = scene.add.rectangle(x, y, 160, 160, 0x00f0ff, 0.18);
-    this.glow.setStrokeStyle(2, 0x00f0ff, 0.7);
+    this.glow = scene.add.rectangle(x, y, 170, 170, 0xff2b6b, 0.2);
+    this.glow.setStrokeStyle(2, 0xff9ec4, 0.8);
 
     this.sprite = scene.add.image(x, y, textureKey);
-    // 重要：先 setDisplaySize 再 setScale，否则 setScale 会基于原始贴图大小覆盖显示尺寸
-    this.sprite.setDisplaySize(110, 110);
-
-    // 入场 tween：从 0.4 缩放到目标尺寸（不能用 scale:1 否则会按 1024 贴图原生大小放大）
-    // 重要：必须在 texture 已加载之后才计算 width，否则会按 32×32 默认 MISSING 贴图算
+    // 道具贴图不一定是正方形（爱心是 5:4 网格），按原生宽高比适配目标边长
+    // 重要：必须在 texture 已生成之后读 width，否则会按 32×32 默认 MISSING 贴图算
     const nativeW = this.sprite.width || 1024;
-    this.targetScale = 110 / nativeW;
+    const nativeH = this.sprite.height || nativeW;
+    const targetW = 130;
+    this.sprite.setDisplaySize(targetW, (targetW * nativeH) / nativeW);
+
+    // 入场 tween：从 0.4 缩放到目标尺寸（不能用 scale:1，否则会按贴图原生大小放大）
+    this.targetScale = targetW / nativeW;
     this.sprite.setScale(0.4 * this.targetScale);
     this.sprite.setAlpha(0);
     this.glow.setAlpha(0);
@@ -354,7 +363,7 @@ class PowerItem {
     // 爆开特效
     for (let i = 0; i < 8; i++) {
       const angle = (i / 8) * Math.PI * 2;
-      const p = this.scene.add.circle(this.sprite.x, this.sprite.y, 6, 0x00f0ff, 1);
+      const p = this.scene.add.circle(this.sprite.x, this.sprite.y, 6, 0xff9ec4, 1);
       this.scene.tweens.add({
         targets: p,
         x: this.sprite.x + Math.cos(angle) * 80,
@@ -417,8 +426,11 @@ export class GameScene extends Phaser.Scene {
   private level!: LevelDef;
 
   // 状态
-  private battery = 20;
-  private timeLeftMs = 30000;
+  /** 生命（颗心）。整数资源，扣光即失败 —— 本作唯一的失败条件 */
+  private lives = 3;
+  private maxLives = 3;
+  /** 已用时（毫秒）。倒计时已取消，只用于结算的速度奖励 */
+  private elapsedMs = 0;
   private score = 0;
   private correctCloses = 0;
   private fakeClicks = 0;
@@ -426,17 +438,16 @@ export class GameScene extends Phaser.Scene {
   private itemsMissed = 0;
   private running = true;
   private startTimeMs = 0;
-  private elapsedMs = 0;
   // 关卡广告投放进度：已出总数 / 需正确关闭总数
   private adsSpawned = 0;
   private adsTotal = 10;
-  // 胜利奖分（含剩余时间加成）
-  private victoryTimeBonus = 0;
+  /** 速度奖励：比参考时长快多少秒 × 每秒分值 */
+  private speedBonus = 0;
 
   // HUD
-  private batteryBar!: Phaser.GameObjects.Rectangle;
-  private batteryText!: Phaser.GameObjects.Text;
-  private timerText!: Phaser.GameObjects.Text;
+  /** 生命的三颗心（按 maxLives 生成），失去的心切换为空心纹理 */
+  private heartImages: Phaser.GameObjects.Image[] = [];
+  private elapsedText!: Phaser.GameObjects.Text;
   private scoreText!: Phaser.GameObjects.Text;
   private statsText!: Phaser.GameObjects.Text;
   // 顶部「目标」常驻提示行：还需正确关闭 X / 共 Y
@@ -476,9 +487,8 @@ export class GameScene extends Phaser.Scene {
     const lv = this.level;
     this.lc = {
       ...this.cfg,
-      initial_battery: lv.initialBattery,
+      initial_lives: lv.initialLives,
       round_seconds: lv.roundSeconds,
-      natural_drain_per_sec: lv.naturalDrainPerSec,
       popup_spawn_min_ms: lv.spawnMinMs,
       popup_spawn_max_ms: lv.spawnMaxMs,
       popup_min_w: lv.popupMinW,
@@ -492,17 +502,24 @@ export class GameScene extends Phaser.Scene {
     const { width, height } = this.scale;
 
     // 初始化状态
-    this.battery = this.lc.initial_battery;
-    this.timeLeftMs = this.lc.round_seconds * 1000;
+    this.maxLives = this.cfg.max_lives;
+    this.lives = Math.min(this.maxLives, this.lc.initial_lives);
     this.score = 0;
     this.correctCloses = 0;
     this.fakeClicks = 0;
     this.itemsCollected = 0;
     this.itemsMissed = 0;
     this.adsSpawned = 0;
-    this.victoryTimeBonus = 0;
+    this.speedBonus = 0;
     this.running = true;
     this.popups = [];
+    // 这些状态在「同一场景实例被重开」时不会自动归零，必须显式重置，
+    // 否则结算页会读到上一局的残留（例如上局的误点次数）
+    this.landingsShown = 0;
+    this.landingActive = false;
+    this.landingContainer = undefined;
+    this.landingTimer = undefined;
+    this.popupSpawnTimer = undefined;
 
     // 背景音乐：场景内循环播放，场景关闭时自动停止（不泄漏到结算页）
     playBgm(this);
@@ -526,6 +543,9 @@ export class GameScene extends Phaser.Scene {
     this.flashRect.setDepth(1000);
     this.flashRect.setBlendMode(Phaser.BlendModes.ADD);
 
+    // 先生成 HUD 与道具要用的像素心纹理（幂等）
+    ensureHeartTextures(this);
+
     this.buildHud();
     this.setupPointerForPopups();
     // 立即生成第一批（在关卡投放总数内）
@@ -533,7 +553,7 @@ export class GameScene extends Phaser.Scene {
 
     // 顶部提示
     this.showBanner(
-      `第${this.level.id}关 · 在倒计时内关掉全部 ${this.adsTotal} 条广告！`,
+      `第${this.level.id}关 · 关掉全部 ${this.adsTotal} 条广告，别把心扣光！`,
       2400,
     );
   }
@@ -560,60 +580,65 @@ export class GameScene extends Phaser.Scene {
     });
     this.objectiveText.setOrigin(0, 0);
 
-    // 右侧：倒计时
-    this.timerText = this.add.text(width - 20, 16, `${this.lc.round_seconds}.0`, {
+    // 右侧：已用时（正计时，仅用于结算速度奖励，不再是失败条件）
+    this.elapsedText = this.add.text(width - 20, 16, '0.0s', {
       fontFamily: 'monospace',
       fontStyle: 'bold',
       fontSize: '38px',
-      color: '#ff2bd6',
+      color: '#00f0ff',
       stroke: '#000',
       strokeThickness: 3,
     });
-    this.timerText.setOrigin(1, 0);
+    this.elapsedText.setOrigin(1, 0);
 
-    // 电量条
-    const barX = 20;
-    const barY = 60;
-    const barW = width - 40;
-    const barH = 30;
-    this.add
-      .rectangle(barX, barY, barW, barH, 0x10041f, 0.95)
-      .setStrokeStyle(2, 0x9d4dff, 1)
-      .setOrigin(0, 0);
-    this.batteryBar = this.add
-      .rectangle(barX + 2, barY + 2, 0, barH - 4, 0xff2bd6, 1)
-      .setOrigin(0, 0);
-
-    this.batteryText = this.add.text(barX + 12, barY + barH / 2, '20%', {
-      fontFamily: 'monospace',
-      fontStyle: 'bold',
-      fontSize: '22px',
-      color: '#ffffff',
-      stroke: '#000',
-      strokeThickness: 3,
-    });
-    this.batteryText.setOrigin(0, 0.5);
-
-    this.add
-      .text(width - 20, barY + barH / 2, '电量', {
-        fontFamily: '"Microsoft YaHei","PingFang SC",sans-serif',
-        fontSize: '20px',
-        color: '#00f0ff',
-      })
-      .setOrigin(1, 0.5);
+    this.buildHearts();
 
     // 得分 / 统计
-    this.scoreText = this.add.text(20, 104, '得分 0', {
+    this.scoreText = this.add.text(20, 110, '得分 0', {
       fontFamily: '"Microsoft YaHei","PingFang SC",sans-serif',
       fontSize: '20px',
       color: '#9d4dff',
     });
-    this.statsText = this.add.text(width - 20, 104, '关对 0 / 误点 0', {
+    this.statsText = this.add.text(width - 20, 110, '关对 0 / 误点 0', {
       fontFamily: '"Microsoft YaHei","PingFang SC",sans-serif',
       fontSize: '17px',
       color: '#ffffff',
     });
     this.statsText.setOrigin(1, 0);
+  }
+
+  /** 生成生命的三颗心（数量随 maxLives） */
+  private buildHearts() {
+    const { width } = this.scale;
+    this.heartImages.forEach((h) => h.destroy());
+    this.heartImages = [];
+
+    const gap = 12;
+    const cw = 50; // 由 hearts.ts 的 7×6 网格 × HEART_CELL_HUD=6 推出的纹理宽
+    const cy = 74; // 位于关卡行与得分行之间
+    const startX = 44;
+
+    for (let i = 0; i < this.maxLives; i++) {
+      const img = this.add.image(startX + i * (cw + gap), cy, TEX_HEART_FULL);
+      img.setDepth(1100);
+      this.heartImages.push(img);
+    }
+
+    this.add
+      .text(width - 20, cy, '生命', {
+        fontFamily: '"Microsoft YaHei","PingFang SC",sans-serif',
+        fontSize: '20px',
+        color: '#ff9ec4',
+      })
+      .setOrigin(1, 0.5);
+  }
+
+  /** 把生命数同步到心的贴图（丢失的心切换为空心） */
+  private syncHearts() {
+    this.heartImages.forEach((img, i) => {
+      const tex = i < this.lives ? TEX_HEART_FULL : TEX_HEART_EMPTY;
+      if (img.texture.key !== tex) img.setTexture(tex);
+    });
   }
 
   private setupPointerForPopups() {
@@ -722,16 +747,13 @@ export class GameScene extends Phaser.Scene {
     } else if (ref.kind === 'item') {
       ref.item?.collect();
     } else if (ref.kind === 'body' && ref.popup) {
-      // 点到广告本体（非 × 按钮区）→ 也算误点：跳到该广告的落地页
-      // （原来这里是"吞掉"，现在改造成新玩法：乱点一下就跳走，逼玩家只敢点真×）
+      // 点到广告本体（非 × 按钮区）→ 也算误点：扣一颗心并跳到该广告的落地页
+      // （原来这里是"吞掉"，现在改造成新玩法：乱点一下就被带走，逼玩家只敢瞄准真×）
       if (this.lc.landing_enabled && this.lc.landing_body_enabled) {
-        const pen = this.lc.landing_body_battery_penalty;
-        this.battery = Math.max(0, this.battery - pen);
         this.score -= this.lc.score_fake_penalty;
         this.fakeClicks += 1;
-        this.shakeAndFlash();
-        playSfx(this, AUDIO.fakeClose);
-        this.showLanding(ref.popup, `点到广告 · 电量 -${pen}% · 被带走`);
+        const pen = this.lc.landing_body_life_penalty;
+        this.takeDamage(pen, ref.popup, `点到广告 · 生命 -${pen} · 被带走`);
       }
     }
   }
@@ -740,10 +762,10 @@ export class GameScene extends Phaser.Scene {
    * 误点 → 跳转该广告对应的全屏落地页。
    *
    * 惩罚设计：
-   *  - 落地页期间**倒计时继续流逝**（被广告带走的时间就是代价），但暂停自然掉电、道具与投放，
-   *    避免"看不见的时候弹窗继续堆叠"造成不公平。
+   *  - 落地页期间**用时继续累加**（被广告带走的时间会压低结算的速度奖励），
+   *    同时暂停道具与投放，避免"看不见的时候弹窗继续堆叠"造成不公平。
    *  - 停留 landing_hold_ms 后自动返回；超过 landing_min_hold_ms 后可点屏幕任意处提前返回。
-   *  - 分数/电量惩罚由触发方（handleFakeClose / 广告本体）负责，这里只做"跳转演出"。
+   *  - 分数/生命惩罚由触发方（handleFakeClose / 广告本体）负责，这里只做"跳转演出"。
    */
   private showLanding(popup: PopupCard, reasonText: string) {
     if (!this.running || !this.lc.landing_enabled) return;
@@ -781,7 +803,7 @@ export class GameScene extends Phaser.Scene {
     t1.setOrigin(0.5);
     c.add(t1);
 
-    const t2 = this.add.text(width / 2, height - 34, '点击任意处返回 · 倒计时仍在流逝', {
+    const t2 = this.add.text(width / 2, height - 34, '点击任意处返回 · 用时仍在增加', {
       fontFamily: '"Microsoft YaHei","PingFang SC",sans-serif',
       fontSize: '18px',
       color: '#ffffff',
@@ -838,7 +860,8 @@ export class GameScene extends Phaser.Scene {
    * 投放一张广告（成功则 adsSpawned+1）。
    * 规则按产品口径：本关「一共要投放 adsTotal 张」就逐张投满为止——
    * 不设同屏上限、不去避让重叠（广告允许重叠）。位置在屏幕内随机取中心，
-   * 保证中心可见即可。能否在倒计时内把 N 张全关掉完全看玩家手速。
+   * 保证中心可见即可。能否把 N 张全关掉完全看玩家手速与准头 ——
+   * 时间不再是失败条件，但拖得越久，结算的速度奖励越低。
    */
   private trySpawnPopup(): boolean {
     if (!this.running) return false;
@@ -878,14 +901,41 @@ export class GameScene extends Phaser.Scene {
     return true;
   }
 
+  /**
+   * 扣生命的唯一入口（误点假× / 误点广告本体都走这里）。
+   *  - 生命为整数，扣到 0 立即结算失败 —— 这是本作唯一的失败条件。
+   *  - 还活着时才播放"被广告带走"演出（跳转落地页）；已死则不再跳转。
+   */
+  private takeDamage(amount: number, popup: PopupCard | undefined, tip: string) {
+    if (!this.running) return;
+    const before = this.lives;
+    this.lives = Math.max(0, this.lives - amount);
+
+    if (this.lives !== before) {
+      // 被扣掉的那颗心当场碎裂
+      for (let i = this.lives; i < before; i++) {
+        const img = this.heartImages[i];
+        if (img) heartBreak(this, img.x, img.y, 1.1);
+      }
+      this.syncHearts();
+      this.shakeAndFlash();
+    }
+    playSfx(this, AUDIO.fakeClose);
+
+    if (this.lives <= 0) {
+      this.endGame(false, 'dead');
+      return;
+    }
+    if (popup) this.showLanding(popup, tip);
+  }
+
   private handleTrueClose(popup: PopupCard) {
     this.correctCloses += 1;
     this.score += this.lc.score_correct;
-    this.battery = Math.min(100, this.battery + this.lc.correct_close_gain);
     this.spawnFloatText(
       popup.container.x,
       popup.container.y,
-      `+${this.lc.correct_close_gain}%`,
+      `+${this.lc.score_correct}`,
       '#00f0ff',
     );
     // 移除该弹窗
@@ -893,10 +943,11 @@ export class GameScene extends Phaser.Scene {
     // 广告被关闭音效
     playSfx(this, AUDIO.adClose);
 
-    // 全部广告都已正确关闭 → 立即胜利
+    // 全部广告都已正确关闭 → 立即胜利。用时越短，速度奖励越高。
     if (this.correctCloses >= this.adsTotal) {
-      const secLeft = Math.max(0, this.timeLeftMs / 1000);
-      this.victoryTimeBonus = Math.floor(secLeft) * 10;
+      const usedSec = this.elapsedMs / 1000;
+      const fastSec = Math.max(0, Math.round(this.lc.round_seconds - usedSec));
+      this.speedBonus = fastSec * this.lc.score_time_bonus_per_sec;
       this.endGame(true);
     }
   }
@@ -904,19 +955,16 @@ export class GameScene extends Phaser.Scene {
   private handleFakeClose(popup: PopupCard) {
     this.fakeClicks += 1;
     this.score -= this.lc.score_fake_penalty;
-    this.battery = Math.max(0, this.battery - this.lc.fake_close_penalty);
     this.spawnFloatText(
       popup.container.x,
       popup.container.y,
-      `点错了！-${this.lc.fake_close_penalty}%`,
+      `点错了！-${this.lc.score_fake_penalty}`,
       '#ff2bd6',
     );
-    this.shakeAndFlash();
-    // 误点假×音效
-    playSfx(this, AUDIO.fakeClose);
     // 误点不关掉广告：弹窗保留，玩家仍需找到真×才能关闭它；
-    // 但惩罚升级为「被广告带走」——跳转到对应的落地页，白白浪费一段倒计时。
-    this.showLanding(popup, `点错了！电量 -${this.lc.fake_close_penalty}% · 被带走`);
+    // 但代价升级为扣一颗心，并被广告带走（跳转到对应的落地页）。
+    const pen = this.lc.fake_close_life_penalty;
+    this.takeDamage(pen, popup, `点错了！生命 -${pen} · 被带走`);
   }
 
   private popupOut(popup: PopupCard, isGood: boolean) {
@@ -947,12 +995,11 @@ export class GameScene extends Phaser.Scene {
     const margin = 100;
     const x = Phaser.Math.Between(margin, width - margin);
     const y = Phaser.Math.Between(height * 0.35, height * 0.7);
-    const tex = Math.random() > 0.5 ? 'it_battery' : 'it_lightning';
     const item = new PowerItem(
       this,
       x,
       y,
-      tex,
+      TEX_HEART_ITEM,
       this.cfg,
       () => this.handleItemCollect(item),
       () => this.handleItemMiss(item),
@@ -964,14 +1011,18 @@ export class GameScene extends Phaser.Scene {
     this.items = this.items.filter((i) => i !== item);
     this.itemsCollected += 1;
     this.score += this.cfg.score_item;
-    this.battery = Math.min(100, this.battery + this.cfg.item_charge_gain);
-    this.timeLeftMs += this.cfg.item_time_bonus * 1000;
-    this.spawnFloatText(
-      item.sprite.x,
-      item.sprite.y,
-      `+${this.cfg.item_charge_gain}% +${this.cfg.item_time_bonus}s`,
-      '#00ff80',
-    );
+
+    if (this.lives < this.maxLives) {
+      const gain = this.cfg.item_life_gain;
+      this.lives = Math.min(this.maxLives, this.lives + gain);
+      this.syncHearts();
+      this.spawnFloatText(item.sprite.x, item.sprite.y, `+${gain} 生命`, '#00ff80');
+    } else {
+      // 生命已满：道具折算成额外分数，避免出现"白捡"的无效拾取
+      const bonus = this.cfg.item_score_when_full;
+      this.score += bonus;
+      this.spawnFloatText(item.sprite.x, item.sprite.y, `生命已满 +${bonus}`, '#00ff80');
+    }
   }
 
   private handleItemMiss(item: PowerItem) {
@@ -1037,31 +1088,10 @@ export class GameScene extends Phaser.Scene {
     if (!this.running) return;
     this.elapsedMs = time - this.startTimeMs;
 
-    // 落地页期间：倒计时继续流逝（这是"被广告带走"的代价），但暂停掉电、道具与投放。
+    // 落地页期间：暂停道具与投放（避免"看不见的时候弹窗继续堆叠"造成不公平），
+    // 但用时继续累加 —— 被广告带走的时间会压低结算的速度奖励。
     if (this.landingActive) {
-      this.timeLeftMs -= delta;
-      if (this.timeLeftMs <= 0) {
-        this.timeLeftMs = 0;
-        this.endGame(false, 'timeout');
-        return;
-      }
       this.updateHud();
-      return;
-    }
-
-    // 倒计时结束：若还没关完 → 失败（剩 X 条未关）
-    this.timeLeftMs -= delta;
-    if (this.timeLeftMs <= 0) {
-      this.timeLeftMs = 0;
-      this.endGame(false, 'timeout');
-      return;
-    }
-
-    // 自然掉电 → 电量耗尽失败
-    this.battery -= (this.lc.natural_drain_per_sec * delta) / 1000;
-    if (this.battery <= 0) {
-      this.battery = 0;
-      this.endGame(false, 'battery');
       return;
     }
 
@@ -1086,20 +1116,11 @@ export class GameScene extends Phaser.Scene {
   }
 
   private updateHud() {
-    const w = this.scale.width;
-    const barMaxW = w - 40 - 4 - 80; // 留右侧「电量」文字
-    this.batteryBar.width = Math.max(0, (this.battery / 100) * barMaxW);
-    this.batteryBar.setFillStyle(this.battery > 30 ? 0xff2bd6 : this.battery > 15 ? 0xff8800 : 0xff2b2b, 1);
-    this.batteryText.setText(`${this.battery.toFixed(1)}%`);
-
-    this.timerText.setText((this.timeLeftMs / 1000).toFixed(1));
-    if (this.timeLeftMs < 5000) {
-      this.timerText.setColor('#ff2b2b');
-    } else if (this.timeLeftMs < 10000) {
-      this.timerText.setColor('#ff8800');
-    } else {
-      this.timerText.setColor('#ff2bd6');
-    }
+    this.elapsedText.setText(`${(this.elapsedMs / 1000).toFixed(1)}s`);
+    // 超过参考时长后变色，提示"速度奖励已经吃不到"
+    const slow = this.elapsedMs > this.lc.round_seconds * 1000;
+    this.elapsedText.setColor(slow ? '#ff8800' : '#00f0ff');
+    this.syncHearts();
 
     // 目标进度：还需正确关闭 X / 共 Y
     const remain = Math.max(0, this.adsTotal - this.correctCloses);
@@ -1115,7 +1136,7 @@ export class GameScene extends Phaser.Scene {
     );
   }
 
-  private endGame(survived: boolean, reason: 'battery' | 'timeout' | 'win' = 'win') {
+  private endGame(survived: boolean, reason: 'dead' | 'win' = 'win') {
     if (!this.running) return;
     this.running = false;
     if (this.popupSpawnTimer) this.popupSpawnTimer.remove();
@@ -1133,7 +1154,7 @@ export class GameScene extends Phaser.Scene {
 
     let score = this.score;
     if (survived) {
-      score += this.level.scoreWinBonus + this.victoryTimeBonus;
+      score += this.level.scoreWinBonus + this.speedBonus;
     }
 
     const snap: ScoreSnapshot = {
@@ -1142,7 +1163,7 @@ export class GameScene extends Phaser.Scene {
       fakeClicks: this.fakeClicks,
       itemsCollected: this.itemsCollected,
       itemsMissed: this.itemsMissed,
-      finalBattery: this.battery,
+      finalLives: this.lives,
       survived,
       elapsedMs: this.elapsedMs,
       landingsShown: this.landingsShown,
@@ -1161,7 +1182,7 @@ export class GameScene extends Phaser.Scene {
       adsTotal: this.adsTotal,
       remainingAds: Math.max(0, this.adsTotal - this.correctCloses),
       winBonus: this.level.scoreWinBonus,
-      timeBonus: this.victoryTimeBonus,
+      timeBonus: this.speedBonus,
       reason,
     });
   }

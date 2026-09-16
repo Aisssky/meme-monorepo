@@ -10,7 +10,7 @@ interface ResultData {
   remainingAds?: number;
   winBonus?: number;
   timeBonus?: number;
-  reason?: 'battery' | 'timeout' | 'win';
+  reason?: 'dead' | 'win';
 }
 
 export class ResultScene extends Phaser.Scene {
@@ -34,7 +34,6 @@ export class ResultScene extends Phaser.Scene {
       this.rd;
     const win = snapshot.survived;
     const lv = level ?? { id: 1, name: '', title: '' } as LevelDef;
-    const reason = this.rd.reason ?? (win ? 'win' : 'battery');
 
     this.cameras.main.setBackgroundColor('#000');
 
@@ -56,13 +55,11 @@ export class ResultScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
 
-    // 副标题（胜负原因）
-    const sub =
-      win
-        ? `第${lv.id}关 · 清掉了全部 ${adsTotal} 条广告`
-        : reason === 'timeout'
-          ? `时间到！还有 ${remainingAds} 条广告没收`
-          : '电量耗尽，手机关机了…';
+    // 副标题（胜负原因）。生命耗尽是本作唯一的失败原因。
+    const maxLives = this.cfg.max_lives ?? 3;
+    const sub = win
+      ? `第${lv.id}关 · 清掉了全部 ${adsTotal} 条广告`
+      : '生命耗尽，你被广告榨干了…';
     this.add
       .text(width / 2, height * 0.23, sub, {
         fontFamily: '"Microsoft YaHei","PingFang SC",sans-serif',
@@ -76,18 +73,20 @@ export class ResultScene extends Phaser.Scene {
     const cardX = width / 2;
     const cardY = height * 0.48;
     const cardW = 540;
-    const cardH = 230;
+    const cardH = 276;
     const g = this.add.graphics();
     g.fillStyle(0x10041f, 0.95);
     g.fillRoundedRect(cardX - cardW / 2, cardY - cardH / 2, cardW, cardH, 16);
     g.lineStyle(3, win ? 0x00f0ff : 0xff2bd6, 1);
     g.strokeRoundedRect(cardX - cardW / 2, cardY - cardH / 2, cardW, cardH, 16);
 
+    const usedSec = (snapshot.elapsedMs / 1000).toFixed(1);
     const lines = [
       `正确关闭广告：${snapshot.correctCloses} / ${adsTotal}`,
       `误点被带走：${snapshot.landingsShown ?? 0} 次`,
       `收集道具：${snapshot.itemsCollected} 个`,
-      `剩余电量：${snapshot.finalBattery.toFixed(1)}%`,
+      `剩余生命：${snapshot.finalLives} / ${maxLives}`,
+      `用时：${usedSec}s`,
       `得分：${snapshot.score}`,
     ];
     const txt = this.add.text(cardX, cardY - 10, lines.join('\n'), {
@@ -102,7 +101,7 @@ export class ResultScene extends Phaser.Scene {
     // 通关奖励明细
     if (win) {
       this.add
-        .text(cardX, cardY + cardH / 2 + 4, `通关 +${winBonus} · 剩余时间 +${timeBonus}`, {
+        .text(cardX, cardY + cardH / 2 + 4, `通关 +${winBonus} · 速度奖励 +${timeBonus}`, {
           fontFamily: '"Microsoft YaHei","PingFang SC",monospace',
           fontStyle: 'bold',
           fontSize: '20px',
