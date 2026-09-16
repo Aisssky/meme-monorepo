@@ -28,26 +28,38 @@ async function bootstrap() {
   }
   const cfg = flat as unknown as GameConfig;
 
-  // 图片 key 映射
+  // 图片 key 映射（config 中的字段名 → Phaser 贴图 key）
   const imageKeys: Record<string, string> = {
     image_background: 'bg',
-    icon_gift: 'ic_gift',
-    icon_warning: 'ic_warning',
-    icon_rocket: 'ic_rocket',
-    icon_castle: 'ic_castle',
-    icon_diamond: 'ic_diamond',
-    icon_calendar: 'ic_calendar',
+    card_shop: 'card_shop',
+    card_gamead: 'card_gamead',
+    card_scam: 'card_scam',
+    card_rogue: 'card_rogue',
+    card_redpack: 'card_redpack',
+    card_booster: 'card_booster',
+    page_shop: 'page_shop',
+    page_gamead: 'page_gamead',
+    page_scam: 'page_scam',
+    page_rogue: 'page_rogue',
+    page_redpack: 'page_redpack',
+    page_booster: 'page_booster',
     item_battery: 'it_battery',
     item_lightning: 'it_lightning',
   };
   const imageUrls: Record<string, string> = {
     image_background: cfg.image_background,
-    icon_gift: cfg.icon_gift,
-    icon_warning: cfg.icon_warning,
-    icon_rocket: cfg.icon_rocket,
-    icon_castle: cfg.icon_castle,
-    icon_diamond: cfg.icon_diamond,
-    icon_calendar: cfg.icon_calendar,
+    card_shop: cfg.card_shop,
+    card_gamead: cfg.card_gamead,
+    card_scam: cfg.card_scam,
+    card_rogue: cfg.card_rogue,
+    card_redpack: cfg.card_redpack,
+    card_booster: cfg.card_booster,
+    page_shop: cfg.page_shop,
+    page_gamead: cfg.page_gamead,
+    page_scam: cfg.page_scam,
+    page_rogue: cfg.page_rogue,
+    page_redpack: cfg.page_redpack,
+    page_booster: cfg.page_booster,
     item_battery: cfg.item_battery,
     item_lightning: cfg.item_lightning,
   };

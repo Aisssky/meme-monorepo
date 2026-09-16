@@ -1,78 +1,69 @@
 /**
  * 弹窗广告内容池。
- * 每种类型对应一张生成图标 + 一段中文文案 + 一个真×率。
- * 戏仿「老人查东西→手机一直弹窗」的网络梗。
+ *
+ * 每一条对应「一张整图广告卡片 + 一张误点后跳转的落地页」。
+ * 卡片贴图里已经把中文文案烘焙好了（标题/价签/按钮都在画面上），
+ * 所以代码不再叠加任何文字，只保留玩法必需的 × 关闭按钮。
+ *
+ * kind 决定关闭按钮的布局（难度）：
+ *  - normal     常规：假× 固定右上 + 真× 随机角（里/外随机）
+ *  - doubleX    双×迷惑：两个同色 ×，一真一假，只能靠"贴边"分辨
+ *  - fullscreen 全屏：尺寸拉满，真× 仅 1 个且贴底边外侧（极易漏看）
  */
 
 import type { PopupTypeDef } from '../types';
 
 export const POPUP_POOL: PopupTypeDef[] = [
   {
-    id: 'gift',
-    iconKey: 'ic_gift',
-    title: '限时福利',
-    bodyLines: ['恭喜！', '您获得神秘大礼包', '点击领取'],
+    id: 'shop',
+    cardKey: 'card_shop',
+    pageKey: 'page_shop',
     trueCloseProb: 0.65,
     kind: 'normal',
+    title: '今日特惠 全场9.9包邮',
   },
   {
-    id: 'warning',
-    iconKey: 'ic_warning',
-    title: '系统安全警告',
-    bodyLines: ['检测到 12 个风险项', '建议立即处理', '点此一键解决'],
-    trueCloseProb: 0.5,
-    kind: 'normal',
-  },
-  {
-    id: 'cleanup',
-    iconKey: 'ic_rocket',
-    title: '内存已满',
-    bodyLines: ['微信占用 8.7GB', '一键加速释放空间'],
-    trueCloseProb: 0.7,
-    kind: 'normal',
-  },
-  {
-    id: 'game',
-    iconKey: 'ic_castle',
-    title: '新世界开启',
-    bodyLines: ['登录即送 9999 钻', '今日开服 限免下载'],
+    id: 'gamead',
+    cardKey: 'card_gamead',
+    pageKey: 'page_gamead',
     trueCloseProb: 0.55,
     kind: 'normal',
+    title: '新服今日开启 登录送648',
   },
   {
-    id: 'lucky',
-    iconKey: 'ic_diamond',
-    title: '幸运大转盘',
-    bodyLines: ['再抽一次', '100% 中奖'],
-    trueCloseProb: 0.45,
-    kind: 'normal',
-  },
-  {
-    id: 'signin',
-    iconKey: 'ic_calendar',
-    title: '每日签到',
-    bodyLines: ['今日签到得 5 元', '连续 7 天再得 88 元'],
-    trueCloseProb: 0.6,
-    kind: 'normal',
-  },
-  {
-    // 双×迷惑广告：弹窗上有两个青色×，1 真 1 假，角位随机。
-    // 假×不再固定在右上，颜色相同（都青），玩家只能靠“贴边/居中”特征分辨。
-    id: 'doublex',
-    iconKey: 'ic_warning',
-    title: '紧急通知',
-    bodyLines: ['您的账号存在异常', '请立即验证身份', '否则将在 5 分钟后锁定'],
+    // 双×迷惑：卡面是两条短信气泡，两个同色 × 分居对角，只能靠"贴边"辨真伪
+    id: 'scam',
+    cardKey: 'card_scam',
+    pageKey: 'page_scam',
     trueCloseProb: 0.5,
     kind: 'doubleX',
+    title: '系统通知 · 账号异常',
   },
   {
-    // 全屏广告：占更大尺寸，真×只有 1 个且贴底中央外侧，极易漏看。
-    id: 'fullscreen',
-    iconKey: 'ic_diamond',
-    title: '全屏弹窗',
-    bodyLines: ['恭喜您获得', '88888 元大额红包！', '点击领取 今日有效'],
+    // 最刁钻的一类：卡面本身就是"满地假按钮"，真× 极易被误点
+    id: 'rogue',
+    cardKey: 'card_rogue',
+    pageKey: 'page_rogue',
+    trueCloseProb: 0.45,
+    kind: 'normal',
+    title: '恭喜您中奖了！',
+  },
+  {
+    // 全屏广告：尺寸拉满，真× 仅 1 个且贴底边外侧
+    id: 'redpack',
+    cardKey: 'card_redpack',
+    pageKey: 'page_redpack',
     trueCloseProb: 0.6,
     kind: 'fullscreen',
+    title: '恭喜获得 888 元现金红包',
+  },
+  {
+    id: 'booster',
+    cardKey: 'card_booster',
+    pageKey: 'page_booster',
+    trueCloseProb: 0.7,
+    kind: 'normal',
+    title: '手机发烫 内存不足',
   },
 ];
 

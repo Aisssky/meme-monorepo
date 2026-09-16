@@ -33,9 +33,16 @@ export class MenuScene extends Phaser.Scene {
 
     const unlocked = getUnlockedLevel();
 
+    // 背景美术自带「手机状态栏 / 导航栏」，UI 必须让开这两条：
+    //  顶部状态栏 ≈ 画面顶部 7.2%，底部导航栏 ≈ 底部 11% 起。
+    // 否则「← 返回」「选择关卡」会压在时间/信号上，列表与署名会压在三键导航上。
+    const topChrome = Math.round(height * 0.072);
+    const navTop = Math.round(height * 0.891);
+    const headerY = topChrome + 36;
+
     // 返回标题页
     const back = this.add
-      .text(width * 0.13, height * 0.055, '← 返回', {
+      .text(width * 0.13, headerY, '← 返回', {
         fontFamily: '"Microsoft YaHei","PingFang SC",sans-serif',
         fontStyle: 'bold',
         fontSize: '22px',
@@ -52,7 +59,7 @@ export class MenuScene extends Phaser.Scene {
 
     // 紧凑标题（选关页）
     this.add
-      .text(width / 2, height * 0.06, '选择关卡', {
+      .text(width / 2, headerY, '选择关卡', {
         fontFamily: '"Microsoft YaHei","PingFang SC",sans-serif',
         fontStyle: 'bold',
         fontSize: '30px',
@@ -66,7 +73,7 @@ export class MenuScene extends Phaser.Scene {
     this.add
       .text(
         width / 2,
-        height * 0.115,
+        headerY + 42,
         `已解锁第 ${unlocked} / ${LEVELS.length} 关 · 点卡片开始 · 可上下滑动`,
         {
           fontFamily: 'monospace',
@@ -77,8 +84,8 @@ export class MenuScene extends Phaser.Scene {
       .setOrigin(0.5);
 
     // ---- 可滚动关卡列表 ----
-    const listTopY = height * 0.20; // 列表可视区顶（紧凑标题后留白）
-    const listBottomY = height * 0.92; // 列表可视区底（留底部署名带）
+    const listTopY = headerY + 110; // 列表可视区顶（让开标题 + 进度提示，首卡上沿不再压住提示文字）
+    const listBottomY = navTop - 92; // 列表可视区底（让开底部导航栏 + 署名前留白）
     const viewH = listBottomY - listTopY;
     const cardW = Math.min(560, width * 0.86);
     const cardH = 96;
@@ -192,9 +199,9 @@ export class MenuScene extends Phaser.Scene {
       cards.push({ card: c, levelId: lv.id, unlocked: isUnlocked });
     }
 
-    // 底部署名（在列表 mask 之外，先画即可）
+    // 底部署名（在列表 mask 之外，先画即可；位置让开底部导航栏）
     this.add
-      .text(width / 2, height * 0.96, '进度自动保存 · 老人防骗 · 戏仿', {
+      .text(width / 2, navTop - 24, '进度自动保存 · 老人防骗 · 戏仿', {
         fontFamily: 'monospace',
         fontSize: '14px',
         color: '#9d4dff',

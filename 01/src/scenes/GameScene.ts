@@ -33,64 +33,6 @@ function computeTrueButtonPos(
   };
 }
 
-/** 圆角矩形绘制（用 Graphics 模拟圆角） */
-function drawRoundedRect(
-  g: Phaser.GameObjects.Graphics,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  r: number,
-  fill: number,
-  alpha = 1,
-) {
-  g.fillStyle(fill, alpha);
-  g.beginPath();
-  g.moveTo(x + r, y);
-  g.lineTo(x + w - r, y);
-  g.arc(x + w - r, y + r, r, -Math.PI / 2, 0, false);
-  g.lineTo(x + w, y + h - r);
-  g.arc(x + w - r, y + h - r, r, 0, Math.PI / 2, false);
-  g.lineTo(x + r, y + h);
-  g.arc(x + r, y + h - r, r, Math.PI / 2, Math.PI, false);
-  g.lineTo(x, y + r);
-  g.arc(x + r, y + r, r, Math.PI, 1.5 * Math.PI, false);
-  g.closePath();
-  g.fillPath();
-}
-
-function drawRoundedRectStroke(
-  g: Phaser.GameObjects.Graphics,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  r: number,
-  stroke: number,
-  lineWidth: number,
-) {
-  g.lineStyle(lineWidth, stroke, 1);
-  g.beginPath();
-  g.moveTo(x + r, y);
-  g.lineTo(x + w - r, y);
-  g.arc(x + w - r, y + r, r, -Math.PI / 2, 0, false);
-  g.lineTo(x + w, y + h - r);
-  g.arc(x + w - r, y + h - r, r, 0, Math.PI / 2, false);
-  g.lineTo(x + r, y + h);
-  g.arc(x + r, y + h - r, r, Math.PI / 2, Math.PI, false);
-  g.lineTo(x, y + r);
-  g.arc(x + r, y + r, r, Math.PI, 1.5 * Math.PI, false);
-  g.closePath();
-  g.strokePath();
-}
-
-/**
- * 弹窗广告卡片。
- * 不同 kind 的关闭按钮布局不同，用于关卡难度叠加：
- * - normal    常规：假× 紫粉固定右上标题栏内侧（经典陷阱）+ 真× 青 随机角贴边（里/外）
- * - doubleX   双×迷惑：两个 × 都为青色、分居两个对角；真×严格贴边，假×略向中心内收（靠位置辨真伪）
- * - fullscreen 全屏广告：卡片取偏大尺寸，真× 青仅 1 个、贴底边中央外侧（易漏看）
- */
 /**
  * 一个可点击目标：整卡 body 或某个 × 按钮。
  * kind: 'body' | 'true' | 'fake'；rect 为本地坐标（相对所属 popup container 中心）。
@@ -105,11 +47,25 @@ interface HitZone {
   radius: number; // 圆角半径（body 用；按钮为 0=直角）
 }
 
+/**
+ * 弹窗广告卡片。
+ *
+ * 卡面 = 一张整图的广告贴图（中文文案已烘焙在画面内），代码不再绘制任何文字，
+ * 只叠加玩法必需的 × 关闭按钮。不同 kind 的 × 布局不同，用于关卡难度叠加：
+ * - normal    常规：假× 紫粉固定右上角内侧（经典陷阱）+ 真× 青 随机角贴边（里/外随机）
+ * - doubleX   双×迷惑：两个 × 都为青色、分居两个对角；真×严格贴边，假×略向中心内收（靠位置辨真伪）
+ * - fullscreen 全屏广告：卡片取偏大尺寸，真× 青仅 1 个、贴底边中央外侧（易漏看）
+ *
+ * 误点（点中假×，或点中广告本体）会触发「跳转广告落地页」，见 GameScene.showLanding。
+ */
 class PopupCard {
   public container!: Phaser.GameObjects.Container;
 
   // 本张广告的可点击像素区（本地坐标）。供场景像素掩码绘制。
   public hitZones: HitZone[] = [];
+
+  /** 本卡的广告类型定义（含贴图 key 与落地页 key），供场景读取误点后要跳哪一页。 */
+  public readonly type: PopupTypeDef;
 
   private onTrue: () => void;
   private onFake: () => void;
@@ -122,7 +78,6 @@ class PopupCard {
     x: number,
     y: number,
     type: PopupTypeDef,
-    iconTexture: string,
     cfg: GameConfig,
     onTrue: () => void,
     onFake: () => void,
@@ -131,6 +86,7 @@ class PopupCard {
   ) {
     this.onTrue = onTrue;
     this.onFake = onFake;
+    this.type = type;
 
     // 1) 弹窗尺寸：normal/doubleX 用关卡范围随机；fullscreen 取偏大固定（关卡 maxW/maxH 本身更大）。
     //    外部可传 pw/ph（= 放置时用来找位的实际尺寸），保证「占位避让」与「实际渲染」一致，
@@ -152,74 +108,12 @@ class PopupCard {
     const container = scene.add.container(x, y);
     this.container = container;
 
-    // 卡片底色
-    const gBg = scene.add.graphics();
-    drawRoundedRect(gBg, -this.w / 2, -this.h / 2, this.w, this.h, 16, 0x10041f, 0.96);
-    container.add(gBg);
-
-    // 霓虹边框（fullscreen 用更醒目的紫描边）
-    const borderColor = type.kind === 'fullscreen' ? 0x9d4dff : 0x00f0ff;
-    const gBorder = scene.add.graphics();
-    drawRoundedRectStroke(gBorder, -this.w / 2, -this.h / 2, this.w, this.h, 16, borderColor, 3);
-    container.add(gBorder);
-
-    // 标题栏：顶部高 44
-    const titleH = 44;
-    const gTitle = scene.add.graphics();
-    drawRoundedRect(gTitle, -this.w / 2, -this.h / 2, this.w, titleH, 16, 0x00f0ff, 0.18);
-    gTitle.fillStyle(0x00f0ff, 0.18);
-    gTitle.fillRect(-this.w / 2, -this.h / 2 + 22, this.w, 22);
-    container.add(gTitle);
-
-    // 标题文字
-    const titleText = scene.add.text(-this.w / 2 + 22, -this.h / 2 + titleH / 2, type.title, {
-      fontFamily: '"Microsoft YaHei","PingFang SC",sans-serif',
-      fontStyle: 'bold',
-      fontSize: '22px',
-      color: '#00f0ff',
-    });
-    titleText.setOrigin(0, 0.5);
-    container.add(titleText);
-
-    // 内容区：标题栏底部 到 CTA 顶
-    const ctaTopY = this.h / 2 - 56;
-    const contentTopY = -this.h / 2 + titleH;
-    const contentCy = (contentTopY + ctaTopY) / 2;
-
-    // 图标：左侧居中
-    const icon = scene.add.image(-this.w / 2 + 90, contentCy, iconTexture);
-    icon.setDisplaySize(type.kind === 'fullscreen' ? 120 : 80, type.kind === 'fullscreen' ? 120 : 80);
-    container.add(icon);
-
-    // 正文：右侧，wrap 宽度随 w 自适应
-    const bodyX = -this.w / 2 + (type.kind === 'fullscreen' ? 210 : 180);
-    const bodyText = scene.add.text(bodyX, contentCy, type.bodyLines.join('\n'), {
-      fontFamily: '"Microsoft YaHei","PingFang SC",sans-serif',
-      fontSize: type.kind === 'fullscreen' ? '22px' : '20px',
-      color: '#ffffff',
-      align: 'left',
-      lineSpacing: 6,
-      wordWrap: { width: this.w - (type.kind === 'fullscreen' ? 260 : 220) },
-    });
-    bodyText.setOrigin(0, 0.5);
-    container.add(bodyText);
-
-    // 底部分割线 + 假 CTA
-    const gCta = scene.add.graphics();
-    gCta.lineStyle(2, 0x9d4dff, 0.6);
-    gCta.lineBetween(-this.w / 2 + 22, ctaTopY, this.w / 2 - 22, ctaTopY);
-    container.add(gCta);
-
-    const cta = scene.add.text(0, this.h / 2 - 28, '【 立即查看 】', {
-      fontFamily: '"Microsoft YaHei","PingFang SC",sans-serif',
-      fontStyle: 'bold',
-      fontSize: '22px',
-      color: '#ff2bd6',
-      stroke: '#000000',
-      strokeThickness: 3,
-    });
-    cta.setOrigin(0.5);
-    container.add(cta);
+    // 卡片贴图：整张广告图铺满 w×h。
+    // 中文文案（标题/价签/按钮）已经烘焙进画面里，因此这里**不再叠加任何代码文字**，
+    // 否则会出现文字重影。宽高仍各自随机 → 贴图会被拉伸变形，像素风下可接受。
+    const card = scene.add.image(0, 0, type.cardKey);
+    card.setDisplaySize(this.w, this.h);
+    container.add(card);
 
     // 记录整卡 body 的可点击区（本地坐标，相对容器中心）。
     // 该几何将画进场景像素掩码：点落在 body 上 → 视为「点中该广告本体」（无按钮则吞掉，
@@ -239,7 +133,7 @@ class PopupCard {
     } else if (type.kind === 'fullscreen') {
       this.buildFullscreenClose(scene, trueBtnSize);
     } else {
-      this.buildNormalButtons(scene, titleH, trueBtnSize, trueBtnOffset);
+      this.buildNormalButtons(scene, trueBtnSize, trueBtnOffset);
     }
 
     // 入场动画
@@ -268,15 +162,14 @@ class PopupCard {
     return this.hitZones.find((z) => z.kind === kind);
   }
 
-  /** normal：假× 紫粉右上标题栏 + 真× 青随机角（里/外） */
+  /** normal：假× 紫粉右上角内侧（经典陷阱）+ 真× 青随机角（里/外） */
   private buildNormalButtons(
     scene: Phaser.Scene,
-    titleH: number,
     trueBtnSize: number,
     trueBtnOffset: number,
   ) {
-    // 假×：固定在标题栏右端内侧
-    this.makeCloseButton(scene, this.w / 2 - 30, -this.h / 2 + titleH / 2, 40, 40, 0xff2bd6, '×', 'fake');
+    // 假×：固定贴在卡片右上角内侧（原来依赖标题栏位置，现在卡片是整张贴图，改用固定角内缩）
+    this.makeCloseButton(scene, this.w / 2 - 30, -this.h / 2 + 30, 40, 40, 0xff2bd6, '×', 'fake');
 
     // 真×：随机角 + 里/外
     const corners: Array<'tl' | 'tr' | 'br' | 'bl'> = ['tl', 'tr', 'br', 'bl'];
@@ -337,10 +230,18 @@ class PopupCard {
     // 按钮容器必须挂进弹窗容器：x/y 是「相对弹窗中心」的局部坐标，
     // 只有作为子对象才会随弹窗一起位移/缩放/入场动画，否则会被当作世界坐标画到屏幕左上角。
     const c = scene.add.container(x, y);
+
+    // 外层深色光晕：卡片换成彩色实拍感广告图后，青色 × 会被卡面吃掉；
+    // 加一圈半透明黑影先把卡面压暗，保证任何卡面上按钮都能跳出来。
+    const halo = scene.add.graphics();
+    halo.fillStyle(0x000000, 0.45);
+    halo.fillRoundedRect(-w / 2 - 5, -h / 2 - 5, w + 10, h + 10, 12);
+    c.add(halo);
+
     const g = scene.add.graphics();
-    g.fillStyle(0x000000, 0.4);
+    g.fillStyle(0x0a0418, 0.95);
     g.fillRoundedRect(-w / 2, -h / 2, w, h, 8);
-    g.lineStyle(2, color, 1);
+    g.lineStyle(3, color, 1);
     g.strokeRoundedRect(-w / 2, -h / 2, w, h, 8);
     c.add(g);
 
@@ -349,6 +250,8 @@ class PopupCard {
       fontStyle: 'bold',
       fontSize: '30px',
       color: '#' + color.toString(16).padStart(6, '0'),
+      stroke: '#000000',
+      strokeThickness: 4,
     });
     t.setOrigin(0.5);
     c.add(t);
@@ -552,6 +455,13 @@ export class GameScene extends Phaser.Scene {
   // 下一个道具出现时间
   private nextItemAt = 0;
 
+  // 误点 → 广告落地页（全屏覆盖层）
+  private landingActive = false;
+  private landingContainer?: Phaser.GameObjects.Container;
+  private landingTimer?: Phaser.Time.TimerEvent;
+  private landingOpenedAt = 0;
+  private landingsShown = 0;
+
   constructor() {
     super(GameScene.KEY);
   }
@@ -635,7 +545,8 @@ export class GameScene extends Phaser.Scene {
     const hudY = 50;
     const hudH = 150;
     const hudBg = this.add.graphics();
-    hudBg.fillStyle(0x0a0418, 0.85);
+    // 不透明度拉高：背景美术顶部自带「状态栏」，半透明会让时间/信号透出来跟 HUD 打架
+    hudBg.fillStyle(0x0a0418, 0.97);
     hudBg.fillRect(0, 0, width, hudH);
     hudBg.lineStyle(2, 0x00f0ff, 0.7);
     hudBg.lineBetween(0, hudH, width, hudH);
@@ -784,6 +695,13 @@ export class GameScene extends Phaser.Scene {
   }
 
   private dispatchTap(wx: number, wy: number) {
+    // 落地页优先：停留够久后，点屏幕任意处提前返回（未够最短停留则忽略，防止手滑瞬间跳过）
+    if (this.landingActive) {
+      if (this.time.now - this.landingOpenedAt >= this.lc.landing_min_hold_ms) {
+        this.closeLanding();
+      }
+      return;
+    }
     if (!this.running) return;
     // 按需重建掩码（仅在点击时构建一次，避免每帧开销）
     this.rebuildMask();
@@ -803,8 +721,93 @@ export class GameScene extends Phaser.Scene {
       ref.popup?.trigger('fake');
     } else if (ref.kind === 'item') {
       ref.item?.collect();
+    } else if (ref.kind === 'body' && ref.popup) {
+      // 点到广告本体（非 × 按钮区）→ 也算误点：跳到该广告的落地页
+      // （原来这里是"吞掉"，现在改造成新玩法：乱点一下就跳走，逼玩家只敢点真×）
+      if (this.lc.landing_enabled && this.lc.landing_body_enabled) {
+        const pen = this.lc.landing_body_battery_penalty;
+        this.battery = Math.max(0, this.battery - pen);
+        this.score -= this.lc.score_fake_penalty;
+        this.fakeClicks += 1;
+        this.shakeAndFlash();
+        playSfx(this, AUDIO.fakeClose);
+        this.showLanding(ref.popup, `点到广告 · 电量 -${pen}% · 被带走`);
+      }
     }
-    // kind === 'body'：点到广告本体非按钮区 → 不做任何事（吞掉，且已屏蔽其下层）
+  }
+
+  /**
+   * 误点 → 跳转该广告对应的全屏落地页。
+   *
+   * 惩罚设计：
+   *  - 落地页期间**倒计时继续流逝**（被广告带走的时间就是代价），但暂停自然掉电、道具与投放，
+   *    避免"看不见的时候弹窗继续堆叠"造成不公平。
+   *  - 停留 landing_hold_ms 后自动返回；超过 landing_min_hold_ms 后可点屏幕任意处提前返回。
+   *  - 分数/电量惩罚由触发方（handleFakeClose / 广告本体）负责，这里只做"跳转演出"。
+   */
+  private showLanding(popup: PopupCard, reasonText: string) {
+    if (!this.running || !this.lc.landing_enabled) return;
+    const key = popup.type.pageKey;
+    if (!this.textures.exists(key)) return; // 素材缺失时静默降级，不阻断主线
+
+    this.landingActive = true;
+    this.landingOpenedAt = this.time.now;
+    this.landingsShown += 1;
+
+    const { width, height } = this.scale;
+    const c = this.add.container(0, 0);
+    c.setDepth(1500);
+
+    // 落地页铺满整屏
+    const page = this.add.image(width / 2, height / 2, key);
+    page.setDisplaySize(width, height);
+    c.add(page);
+    c.add(this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.22));
+
+    // 底部提示条：说明"被带走了"以及怎么回来
+    const barH = 104;
+    const bar = this.add.rectangle(width / 2, height - barH / 2, width, barH, 0x0a0418, 0.85);
+    bar.setStrokeStyle(2, 0xff2bd6, 1);
+    c.add(bar);
+
+    const t1 = this.add.text(width / 2, height - barH + 32, reasonText, {
+      fontFamily: '"Microsoft YaHei","PingFang SC",sans-serif',
+      fontStyle: 'bold',
+      fontSize: '24px',
+      color: '#ff2bd6',
+      stroke: '#000',
+      strokeThickness: 3,
+    });
+    t1.setOrigin(0.5);
+    c.add(t1);
+
+    const t2 = this.add.text(width / 2, height - 34, '点击任意处返回 · 倒计时仍在流逝', {
+      fontFamily: '"Microsoft YaHei","PingFang SC",sans-serif',
+      fontSize: '18px',
+      color: '#ffffff',
+    });
+    t2.setOrigin(0.5);
+    c.add(t2);
+
+    c.setAlpha(0);
+    this.tweens.add({ targets: c, alpha: 1, duration: 150 });
+
+    this.landingContainer = c;
+    this.landingTimer = this.time.delayedCall(this.lc.landing_hold_ms, () => this.closeLanding());
+  }
+
+  /** 收起落地页（点击提前返回 / 停留超时）。 */
+  private closeLanding() {
+    if (!this.landingActive) return;
+    this.landingActive = false;
+    if (this.landingTimer) {
+      this.landingTimer.remove();
+      this.landingTimer = undefined;
+    }
+    const c = this.landingContainer;
+    this.landingContainer = undefined;
+    if (!c) return;
+    this.tweens.add({ targets: c, alpha: 0, duration: 140, onComplete: () => c.destroy() });
   }
 
   private popupSpawnTimer?: Phaser.Time.TimerEvent;
@@ -839,6 +842,7 @@ export class GameScene extends Phaser.Scene {
    */
   private trySpawnPopup(): boolean {
     if (!this.running) return false;
+    if (this.landingActive) return false; // 落地页期间暂缓投放（返回后会按原节奏继续）
     if (this.adsSpawned >= this.adsTotal) return false;
 
     const type = pickRandomPopupType(this.level.popupPoolIds);
@@ -863,7 +867,6 @@ export class GameScene extends Phaser.Scene {
       x,
       y,
       type,
-      type.iconKey,
       this.lc,
       () => this.handleTrueClose(popup),
       () => this.handleFakeClose(popup),
@@ -911,7 +914,9 @@ export class GameScene extends Phaser.Scene {
     this.shakeAndFlash();
     // 误点假×音效
     playSfx(this, AUDIO.fakeClose);
-    // 误点不关掉广告：弹窗保留，玩家仍需找到真×才能关闭它
+    // 误点不关掉广告：弹窗保留，玩家仍需找到真×才能关闭它；
+    // 但惩罚升级为「被广告带走」——跳转到对应的落地页，白白浪费一段倒计时。
+    this.showLanding(popup, `点错了！电量 -${this.lc.fake_close_penalty}% · 被带走`);
   }
 
   private popupOut(popup: PopupCard, isGood: boolean) {
@@ -1032,6 +1037,18 @@ export class GameScene extends Phaser.Scene {
     if (!this.running) return;
     this.elapsedMs = time - this.startTimeMs;
 
+    // 落地页期间：倒计时继续流逝（这是"被广告带走"的代价），但暂停掉电、道具与投放。
+    if (this.landingActive) {
+      this.timeLeftMs -= delta;
+      if (this.timeLeftMs <= 0) {
+        this.timeLeftMs = 0;
+        this.endGame(false, 'timeout');
+        return;
+      }
+      this.updateHud();
+      return;
+    }
+
     // 倒计时结束：若还没关完 → 失败（剩 X 条未关）
     this.timeLeftMs -= delta;
     if (this.timeLeftMs <= 0) {
@@ -1103,6 +1120,17 @@ export class GameScene extends Phaser.Scene {
     this.running = false;
     if (this.popupSpawnTimer) this.popupSpawnTimer.remove();
 
+    // 结算时立即收起落地页覆盖层（不等淡出动画）
+    if (this.landingTimer) {
+      this.landingTimer.remove();
+      this.landingTimer = undefined;
+    }
+    if (this.landingContainer) {
+      this.landingContainer.destroy();
+      this.landingContainer = undefined;
+    }
+    this.landingActive = false;
+
     let score = this.score;
     if (survived) {
       score += this.level.scoreWinBonus + this.victoryTimeBonus;
@@ -1117,6 +1145,7 @@ export class GameScene extends Phaser.Scene {
       finalBattery: this.battery,
       survived,
       elapsedMs: this.elapsedMs,
+      landingsShown: this.landingsShown,
     };
 
     if (survived) {

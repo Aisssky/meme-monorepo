@@ -42,8 +42,12 @@ export function playBgm(scene: Phaser.Scene, key: string = AUDIO.bgm, volume = 0
   if (c.audio_music_enabled === false) return;
   const url = c[key];
   if (!url) return;
-  if (scene.sound.isPlaying(key)) return;
-  scene.sound.play(key, { loop: true, volume });
+  try {
+    if (typeof scene.sound.isPlaying === 'function' && scene.sound.isPlaying(key)) return;
+    scene.sound.play(key, { loop: true, volume });
+  } catch {
+    /* 音频不可用（无设备 / 未解锁）时静默降级 */
+  }
 }
 
 /** 触发一次性短音效。 */
@@ -52,11 +56,31 @@ export function playSfx(scene: Phaser.Scene, key: string, volume = 0.85) {
   if (c.audio_sfx_enabled === false) return;
   const url = c[key];
   if (!url) return;
-  scene.sound.play(key, { volume });
+  try {
+    scene.sound.play(key, { volume });
+  } catch {
+    /* 同上 */
+  }
 }
 
-/** 停止指定音频（BGM 场景切换兜底）。 */
+/**
+ * Phaser 在没有可用音频设备 / 浏览器尚未解锁 AudioContext 时会退化成
+ * `NoAudioSoundManager`——它**没有 `stop()`**（只有 `stopByKey`），
+ * 直接调 `stop(key)` 会在场景 shutdown 时抛出 `xxx.stop is not a function`。
+ * 这里统一走 `stopByKey` 并做能力探测，任何异常都吞掉，绝不让音频拖垮场景切换。
+ */
 export function stopAudio(scene: Phaser.Scene, key: string) {
-  const sm = scene.sound as any;
-  if (sm.isPlaying && sm.isPlaying(key)) sm.stop(key);
+  try {
+    const sm = scene.sound as unknown as {
+      isPlaying?: (k: string) => boolean;
+      stopByKey?: (k: string) => void;
+      stop?: (k: string) => void;
+    };
+    if (!sm) return;
+    if (typeof sm.isPlaying === 'function' && !sm.isPlaying(key)) return;
+    if (typeof sm.stopByKey === 'function') sm.stopByKey(key);
+    else if (typeof sm.stop === 'function') sm.stop(key);
+  } catch {
+    /* 无音频设备等场景：静默忽略 */
+  }
 }

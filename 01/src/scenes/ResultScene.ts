@@ -85,7 +85,7 @@ export class ResultScene extends Phaser.Scene {
 
     const lines = [
       `正确关闭广告：${snapshot.correctCloses} / ${adsTotal}`,
-      `误点假×：${snapshot.fakeClicks} 次`,
+      `误点被带走：${snapshot.landingsShown ?? 0} 次`,
       `收集道具：${snapshot.itemsCollected} 个`,
       `剩余电量：${snapshot.finalBattery.toFixed(1)}%`,
       `得分：${snapshot.score}`,
@@ -116,7 +116,7 @@ export class ResultScene extends Phaser.Scene {
     const btnW = 280;
     const leftX = width / 2 - 160;
     const rightX = width / 2 + 160;
-    const btnCY = height * 0.84;
+    const btnCY = height * 0.815; // 让开背景美术底部的手机导航栏
     const mkBtn = (bx: number, label: string, cb: () => void, primary = false) => {
       const b = this.add
         .rectangle(bx, btnCY, btnW, 80, primary ? 0x14082a : 0x1a0a2a, 1)

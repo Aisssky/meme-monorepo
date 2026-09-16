@@ -35,13 +35,27 @@ export interface GameConfig {
   score_item: number;
   score_miss_item: number;
   score_win_bonus: number;
+  // 误点 → 跳转广告落地页（新增玩法）
+  landing_enabled: boolean;             // 总开关
+  landing_hold_ms: number;              // 落地页自动关闭时长
+  landing_min_hold_ms: number;          // 最短停留（之后可点击提前返回）
+  landing_body_enabled: boolean;        // 点广告本体（非按钮区）是否也跳转
+  landing_body_battery_penalty: number; // 点本体时的额外扣电
   image_background: string;
-  icon_gift: string;
-  icon_warning: string;
-  icon_rocket: string;
-  icon_castle: string;
-  icon_diamond: string;
-  icon_calendar: string;
+  // 弹窗卡片（整张带文案的广告图，2304x1728）
+  card_shop: string;
+  card_gamead: string;
+  card_scam: string;
+  card_rogue: string;
+  card_redpack: string;
+  card_booster: string;
+  // 广告落地页（误点后全屏展示，1440x2560）
+  page_shop: string;
+  page_gamead: string;
+  page_scam: string;
+  page_rogue: string;
+  page_redpack: string;
+  page_booster: string;
   item_battery: string;
   item_lightning: string;
   // 音频（CDN 托管，运行时按 key 注入 loader）
@@ -57,9 +71,10 @@ export interface GameConfig {
 
 export interface PopupTypeDef {
   id: string;
-  iconKey: TextureKey;
-  title: string;
-  bodyLines: string[];
+  /** 弹窗卡片贴图 key（整张带中文文案的广告图，代码不再叠加文字） */
+  cardKey: TextureKey;
+  /** 误点后跳转的落地页贴图 key */
+  pageKey: TextureKey;
   trueCloseProb: number; // 0-1
   /**
    * 广告布局种类：
@@ -69,6 +84,10 @@ export interface PopupTypeDef {
    * - 'fullscreen'全屏广告：尺寸按关卡全屏档放大，真×只有 1 个，贴底中央外侧（易漏看）
    */
   kind: 'normal' | 'doubleX' | 'fullscreen';
+  /** @deprecated 文案已烘焙进卡片贴图，不再渲染；仅留作调试/无障碍说明 */
+  title?: string;
+  /** @deprecated 同上 */
+  bodyLines?: string[];
 }
 
 /**
@@ -96,12 +115,18 @@ export interface LevelDef {
 
 export type TextureKey =
   | 'bg'
-  | 'ic_gift'
-  | 'ic_warning'
-  | 'ic_rocket'
-  | 'ic_castle'
-  | 'ic_diamond'
-  | 'ic_calendar'
+  | 'card_shop'
+  | 'card_gamead'
+  | 'card_scam'
+  | 'card_rogue'
+  | 'card_redpack'
+  | 'card_booster'
+  | 'page_shop'
+  | 'page_gamead'
+  | 'page_scam'
+  | 'page_rogue'
+  | 'page_redpack'
+  | 'page_booster'
   | 'it_battery'
   | 'it_lightning';
 
@@ -117,4 +142,6 @@ export interface ScoreSnapshot {
   finalBattery: number;
   survived: boolean;
   elapsedMs: number;
+  /** 本局被广告带走（误点跳转落地页）的次数 */
+  landingsShown?: number;
 }

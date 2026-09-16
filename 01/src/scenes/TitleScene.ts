@@ -94,16 +94,18 @@ export class TitleScene extends Phaser.Scene {
       );
     }
 
-    // 底部信息（不挡中央舞台）
+    // 底部信息：必须让开背景美术里的「手机导航栏」（约在画面底部 11% 区域），
+    // 否则文字会压在三键导航上。
+    const navTop = Math.round(height * 0.891);
     this.add
-      .text(width / 2, height * 0.93, `已解锁第 ${unlocked} / ${MAX_LEVEL} 关 · 进度自动保存`, {
+      .text(width / 2, navTop - 56, `已解锁第 ${unlocked} / ${MAX_LEVEL} 关 · 进度自动保存`, {
         fontFamily: 'monospace',
         fontSize: '14px',
         color: '#9d4dff',
       })
       .setOrigin(0.5);
     this.add
-      .text(width / 2, height * 0.965, '老人防骗 · 戏仿', {
+      .text(width / 2, navTop - 28, '老人防骗 · 戏仿', {
         fontFamily: 'monospace',
         fontSize: '13px',
         color: '#666666',

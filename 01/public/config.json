@@ -209,12 +209,127 @@
     "min": 0,
     "max": 200
   },
+  "landing_enabled": {
+    "value": true,
+    "type": "bool",
+    "label": "误点跳转落地页"
+  },
+  "landing_hold_ms": {
+    "value": 2000,
+    "type": "int",
+    "label": "落地页停留ms",
+    "min": 800,
+    "max": 5000
+  },
+  "landing_min_hold_ms": {
+    "value": 600,
+    "type": "int",
+    "label": "落地页最短停留ms",
+    "min": 200,
+    "max": 2000
+  },
+  "landing_body_enabled": {
+    "value": true,
+    "type": "bool",
+    "label": "点广告本体也跳转"
+  },
+  "landing_body_battery_penalty": {
+    "value": 2.0,
+    "type": "float",
+    "label": "点本体额外扣电",
+    "min": 0,
+    "max": 10
+  },
   "image_background": {
-    "value": "https://ppy-test.tos-cn-beijing.volces.com/images/61ac4b9f-028a-4519-97b4-3f4600c8a4b8.png",
+    "value": "https://ppy-test.tos-cn-beijing.volces.com/images/0a0a99e7-e73f-436f-b6b8-7d447e9d13fc.png",
     "type": "image",
     "image_type": "Asset",
     "size": "1440x2560",
     "label": "桌面背景"
+  },
+  "card_shop": {
+    "value": "https://ppy-test.tos-cn-beijing.volces.com/images/4ac36360-8770-4f77-8dbd-cc201b99caf0.png",
+    "type": "image",
+    "image_type": "Asset",
+    "size": "2304x1728",
+    "label": "弹窗-日常用品售卖"
+  },
+  "card_gamead": {
+    "value": "https://ppy-test.tos-cn-beijing.volces.com/images/aeb383d1-0d75-4fbd-b969-a91f5cca58f4.png",
+    "type": "image",
+    "image_type": "Asset",
+    "size": "2304x1728",
+    "label": "弹窗-小游戏广告"
+  },
+  "card_scam": {
+    "value": "https://ppy-test.tos-cn-beijing.volces.com/images/fb72c6f5-1b52-4c16-9812-86ebc4b6a817.png",
+    "type": "image",
+    "image_type": "Asset",
+    "size": "2304x1728",
+    "label": "弹窗-诈骗消息"
+  },
+  "card_rogue": {
+    "value": "https://ppy-test.tos-cn-beijing.volces.com/images/7c1444e2-745a-442b-be98-6c91e5b8143b.png",
+    "type": "image",
+    "image_type": "Asset",
+    "size": "2304x1728",
+    "label": "弹窗-流氓弹窗"
+  },
+  "card_redpack": {
+    "value": "https://ppy-test.tos-cn-beijing.volces.com/images/7ff6752d-6771-4c48-9a03-3cdb306d32f7.png",
+    "type": "image",
+    "image_type": "Asset",
+    "size": "2304x1728",
+    "label": "弹窗-伪现金红包"
+  },
+  "card_booster": {
+    "value": "https://ppy-test.tos-cn-beijing.volces.com/images/b5447bad-39aa-4a96-9fee-20be8bc72405.png",
+    "type": "image",
+    "image_type": "Asset",
+    "size": "2304x1728",
+    "label": "弹窗-系统清理加速"
+  },
+  "page_shop": {
+    "value": "https://ppy-test.tos-cn-beijing.volces.com/images/cb8250a2-f5f5-48c4-bcc2-21c608cacd6e.png",
+    "type": "image",
+    "image_type": "Asset",
+    "size": "1440x2560",
+    "label": "落地页-电商秒杀会场"
+  },
+  "page_gamead": {
+    "value": "https://ppy-test.tos-cn-beijing.volces.com/images/fd9b0dcc-82e4-42ba-8ad5-35a1c4bc56ce.png",
+    "type": "image",
+    "image_type": "Asset",
+    "size": "1440x2560",
+    "label": "落地页-游戏详情"
+  },
+  "page_scam": {
+    "value": "https://ppy-test.tos-cn-beijing.volces.com/images/310f470b-4b3f-42e9-9b43-dd4319582411.png",
+    "type": "image",
+    "image_type": "Asset",
+    "size": "1440x2560",
+    "label": "落地页-身份验证"
+  },
+  "page_rogue": {
+    "value": "https://ppy-test.tos-cn-beijing.volces.com/images/7757a6fd-e087-44ee-8188-2a796f837703.png",
+    "type": "image",
+    "image_type": "Asset",
+    "size": "1440x2560",
+    "label": "落地页-中奖领取"
+  },
+  "page_redpack": {
+    "value": "https://ppy-test.tos-cn-beijing.volces.com/images/2a29d14c-f2fe-4879-8e6e-a7f8587d6501.png",
+    "type": "image",
+    "image_type": "Asset",
+    "size": "1440x2560",
+    "label": "落地页-现金提现"
+  },
+  "page_booster": {
+    "value": "https://ppy-test.tos-cn-beijing.volces.com/images/b548e356-c6b5-47cb-9e66-e55c20d3a0da.png",
+    "type": "image",
+    "image_type": "Asset",
+    "size": "1440x2560",
+    "label": "落地页-清理扫描"
   },
   "icon_gift": {
     "value": "https://ppy-test.tos-cn-beijing.volces.com/cutout/62175e20-5ced-42c2-8bfd-6137b3d3f18f.png",
